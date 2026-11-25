@@ -65,6 +65,9 @@ textarea:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
 nav button{position:relative}nav .dot{position:absolute;top:2px;left:calc(50% + 6px)}
 summary{cursor:pointer}
 .row>.pill{flex:0 0 auto}
+.mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.mh{text-align:center;font-size:11px;color:var(--mut);font-weight:600;padding-bottom:2px}
+.mc{background:var(--bg);color:var(--ink);border:2px solid transparent;border-radius:9px;padding:4px 0 5px;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:50px;font:600 13px Inter,sans-serif;min-width:0}
+.mc i{font-style:normal;font-size:11px;font-weight:700;color:#fff;border-radius:6px;min-width:22px;height:18px;line-height:18px;padding:0 4px}.mc.today{border-color:var(--ac)}.mc.sel{background:var(--ac);color:var(--acT)}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center;font-size:12px;color:var(--mut)}.tile b{display:block;font:800 26px Archivo,sans-serif;color:var(--ink)}
 .sh{font:700 12px Inter,sans-serif;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:12px 0 2px}
 .sr{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);color:inherit;text-decoration:none}
@@ -218,12 +221,29 @@ function parseICS(t){t=t.replace(/\r?\n[ \t]/g,"");const out=[];
  if(a.t&&e&&e.t&&e.d==addD(a.d,1)&&e.t>"00:00")out.push({id:id+"b",d:e.d,s:"00:00",e:e.t,n:n+" (fine)",src:1,sleep:1})});return out}/* turno di notte: la fine va sul giorno dopo */
 
 /* Agenda */
+let agv="mese",agm=null,agSel=null;
+const shK=n=>{n=nk(n);return /matt/.test(n)?"M":/pome/.test(n)?"P":/nott/.test(n)?"N":/ripos|smont|libero/.test(n)?"R":/ferie/.test(n)?"F":/malat/.test(n)?"X":""};
+const SHC={M:"#D98A00",P:"#2848E8",N:"#6B4FD8",R:"#1E9E5A",F:"#0E9AA7",X:"#D6453D"},SHN={M:"mattine",P:"pomeriggi",N:"notti",R:"riposi",F:"ferie",X:"malattia"};
+const dayShift=d=>evOn(d).find(x=>!x.sleep&&(x.rot||x.src));
+function agNav(k){const [Y,M]=(agm||day().slice(0,7)).split("-").map(Number),x=new Date(Y,M-1+k,1);agm=x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0");agSel=null;render()}
+function monthView(){const m=agm||day().slice(0,7),[Y,Mo]=m.split("-").map(Number),n=new Date(Y,Mo,0).getDate(),off=wd(m+"-01"),t=day(),cnt={};
+ const cells=[...Array(n)].map((_,i)=>{const d=m+"-"+String(i+1).padStart(2,"0"),s=dayShift(d),k=s?(s.k||shK(s.n)):"";if(s)cnt[k||"?"]=(cnt[k||"?"]||0)+1;
+  return `<button class="mc${d==t?" today":""}${d==agSel?" sel":""}" onclick="agSel='${d}';render()" aria-label="${fd(d)}${s?": "+esc(s.n):""}"><span>${i+1}</span>${s?`<i style="background:${SHC[k]||"var(--mut)"}">${esc(k||s.n.slice(0,2))}</i>`:"<i></i>"}</button>`});
+ const sel=agSel||(t.startsWith(m)?t:m+"-01"),tit=new Date(Y,Mo-1,1).toLocaleDateString("it-IT",{month:"long",year:"numeric"});
+ return `<div class="card"><div class="row" style="flex-wrap:nowrap;margin-bottom:8px"><button class="g" style="flex:0" onclick="agNav(-1)" aria-label="Mese precedente">‹</button><h2 style="margin:0;text-align:center;text-transform:capitalize">${tit}</h2><button class="g" style="flex:0" onclick="agNav(1)" aria-label="Mese successivo">›</button></div>
+ <div class="mgrid">${DN.map(x=>`<div class="mh">${x}</div>`).join("")}${"<div></div>".repeat(off)}${cells.join("")}</div>
+ <div class="mut" style="margin-top:10px">${Object.keys(cnt).length?"Nel mese: "+Object.keys(cnt).map(k=>`<b style="color:${SHC[k]||"inherit"}">${cnt[k]}</b> ${SHN[k]||"altri"}`).join(" · "):"Nessun turno in questo mese."}</div></div>
+ ${dayCard(sel)}`}
+function dayCard(d){const E=evOn(d),X=exOn(d),sl=freeSlot(d);return `<div class="card"><h3>${DN[wd(d)]} ${fd(d)}</h3>${E.map(x=>`<div class="item"><span>${x.rot&&!x.sleep?`<b>${esc(x.n)}</b>${x.s?" "+x.s+"–"+(x.e=="23:59"?shiftOn(d).e:x.e):""}${x.fix?' <span class="pill">modificato</span>':""}`:`${x.s?x.s+"–"+x.e:"Tutto il giorno"} · ${esc(x.n)}`}</span>${x.rot?(x.sleep?"":fixSel(d,x)):x.src?"":`<button class="x" onclick="delEv('${x.id}')">✕</button>`}</div>`).join("")}${X.length?`<div class="item"><span>🏋️ ${X.map(e=>esc(e.name)).join(", ")}</span><span class="pill">${sl||"nessuna fascia"}</span></div>`:""}${!E.length&&!X.length?'<p class="mut" style="margin:6px 0 0">Giorno libero.</p>':""}</div>`}
 function vAg(){const b=Date.now(),days=[...Array(7)].map((_,i)=>ld(new Date(b+i*864e5)));
- return `<h1>Agenda</h1><p class="sub">Turni, impegni e allenamenti dei prossimi 7 giorni.</p>
+ return `<h1>Agenda</h1><p class="sub">Turni, impegni e allenamenti.</p>
+ <div class="row" style="margin-bottom:12px">${[["mese","Mese"],["sett","Prossimi 7 giorni"]].map(b=>`<button class="${agv==b[0]?"":"g"}" onclick="agv='${b[0]}';render()">${b[1]}</button>`).join("")}</div>
+ ${agv=="mese"?monthView():days.map(dayCard).join("")}
+ <h2 style="margin:18px 0 10px">Impostazioni</h2>
  <div class="card"><h2>Aggiungi impegno</h2><input id="en" placeholder="Titolo (es. Dentista)"><div class="row" style="margin-top:8px"><div><label>Giorno</label><input id="ed" type="date" value="${day()}"></div><div><label>Inizio</label><input id="es" type="time"></div><div><label>Fine</label><input id="ee" type="time"></div></div><button style="width:100%;margin-top:8px" onclick="addEv()">Aggiungi</button></div>
  ${calCard()}${rotCard()}
  <details class="card"><summary><b>Importa da file .ics</b></summary><p class="mut">Esporta un calendario in un file .ics e sceglilo qui. Un nuovo import sostituisce il precedente.</p><input id="ei" type="file" accept=".ics,text/calendar" onchange="impICS(this)"></details>
- ${days.map(d=>{const E=evOn(d),X=exOn(d),sl=freeSlot(d);return `<div class="card"><h3>${DN[wd(d)]} ${fd(d)}</h3>${E.map(x=>`<div class="item"><span>${x.rot&&!x.sleep?`<b>${esc(x.n)}</b>${x.s?" "+x.s+"–"+(x.e=="23:59"?shiftOn(d).e:x.e):""}${x.fix?' <span class="pill">modificato</span>':""}`:`${x.s?x.s+"–"+x.e:"Tutto il giorno"} · ${esc(x.n)}`}</span>${x.rot?(x.sleep?"":fixSel(d,x)):x.src?"":`<button class="x" onclick="delEv('${x.id}')">✕</button>`}</div>`).join("")}${X.length?`<div class="item"><span>🏋️ ${X.map(e=>esc(e.name)).join(", ")}</span><span class="pill">${sl||"nessuna fascia"}</span></div>`:""}${!E.length&&!X.length?'<p class="mut" style="margin:6px 0 0">Giorno libero.</p>':""}</div>`}).join("")}`}
+ `}
 /* Calendario collegato (es. turni di Supershift copiati in un calendario iCloud pubblico).
    Il link è in S.cal e si sincronizza; lo legge la funzione Supabase "ics", che risponde solo a chi ha fatto login. */
 const hsh=s=>{let h=5381;for(const c of s)h=(h*33^c.charCodeAt(0))>>>0;return h.toString(36)};

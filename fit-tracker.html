@@ -142,16 +142,25 @@ function vLogin(){return `<div style="max-width:380px;margin:8vh auto 0"><h1>Fit
  <div class="card"><label for="lem">Email</label><input id="lem" type="email" autocomplete="username" inputmode="email">
  <label for="lpw" style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password" onkeydown="if(event.key=='Enter')login(0)">
  <button style="width:100%;margin-top:12px" onclick="login(0)">Accedi</button>
- <div class="row" style="margin-top:8px"><button class="g" onclick="login(1)">Crea account</button><button class="g" onclick="forgot()">Password dimenticata</button></div>
+ <button class="g" style="width:100%;margin-top:8px" onclick="forgot()">Password dimenticata</button>
  <p id="lmsg" class="mut" style="margin:10px 0 0" role="status"></p></div>
  <p class="mut">I dati sono salvati sul dispositivo e in una copia online in Europa, visibile solo dopo l’accesso con il tuo account.</p></div>`}
+/* Dopo il link d'invito o di recupero: la password la sceglie l'utente qui */
+let needPw=/type=(invite|recovery)/.test(location.hash)?1:0;
+function vSetPw(){return `<div style="max-width:380px;margin:8vh auto 0"><h1>Scegli la password</h1><p class="sub">${esc(me?me.email:"")}: la userai per accedere da iPhone, iPad e computer.</p>
+ <div class="card"><label for="np1">Nuova password (almeno 8 caratteri)</label><input id="np1" type="password" autocomplete="new-password">
+ <label for="np2" style="margin-top:8px">Ripetila</label><input id="np2" type="password" autocomplete="new-password" onkeydown="if(event.key=='Enter')setPw()">
+ <button style="width:100%;margin-top:12px" onclick="setPw()">Salva password</button><p id="pmsg" class="mut" style="margin:10px 0 0" role="status"></p></div></div>`}
+async function setPw(){const a=$("np1").value,b=$("np2").value,o=$("pmsg");if(a.length<8){o.textContent="Usa almeno 8 caratteri.";return}if(a!==b){o.textContent="Le due password non coincidono.";return}
+ o.textContent="Salvo…";const {error}=await sb.auth.updateUser({password:a});if(error){o.innerHTML=`<span style="color:var(--bad)">${esc(error.message)}</span>`;return}
+ needPw=0;history.replaceState(null,"",location.pathname);render()}
 function accCard(){if(!sb)return `<div class="card"><h2>Account</h2><p class="mut" style="margin:0">${SB_URL?"Sincronizzazione non disponibile: serve la connessione per caricarla la prima volta.":"Sincronizzazione non ancora collegata: i dati restano solo su questo dispositivo."}</p></div>`;
  return `<div class="card"><h2>Account</h2><div class="kv"><span>Accesso</span><span>${esc(me?me.email:"")}</span></div><p id="syncst" class="mut" style="margin:6px 0 10px" role="status">${syncTxt()}</p>
  <div class="row"><button class="g" onclick="syncNow()">Sincronizza ora</button><button class="g" onclick="logout()">Esci</button></div></div>`}
 async function startSync(){if(!SB_URL||!window.supabase){render();return}
  sb=supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
  sb.auth.onAuthStateChange((ev,ses)=>{
-  if(ev=="PASSWORD_RECOVERY"){setTimeout(async()=>{const p=prompt("Scegli la nuova password (almeno 6 caratteri):");if(p){const {error}=await sb.auth.updateUser({password:p});alert(error?error.message:"Password aggiornata.")}},0)}
+  if(ev=="PASSWORD_RECOVERY")needPw=1;
   const was=me&&me.id;me=ses?ses.user:null;
   if(me&&me.id!==was){const a=localStorage.getItem(K+"-acct");if(a&&a!==me.id){setBase(null,"");}localStorage.setItem(K+"-acct",me.id);setTimeout(syncNow,0)}
   if(!me)setSync("off");authReady=1;render()});
@@ -396,7 +405,7 @@ function closeV(){const V=$("viewer");try{URL.revokeObjectURL(V.dataset.u)}catch
 /* Navigazione */
 const TABS=[["oggi","💧","Oggi"],["gym","🏋️","Palestra"],["diet","🍽️","Dieta"],["ag","📅","Agenda"],["prog","📈","Progressi"],["doc","🩺","Referti"]];
 function render(){const y=window.scrollY;
- if(sb&&!me){$("nav").style.display="none";$("app").innerHTML=authReady?vLogin():'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>';return}
+ if(sb&&(!me||needPw)){$("nav").style.display="none";$("app").innerHTML=!authReady?'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>':me?vSetPw():vLogin();return}
  $("nav").style.display="";
  const na=alertsN();$("nav").innerHTML=TABS.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')" aria-label="${t[2]}${t[0]=="doc"&&na?`, ${na} avvisi`:""}"><span>${t[1]}</span>${t[2]}${t[0]=="doc"&&na?`<i class="dot">${na}</i>`:""}</button>`).join("");
  $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc}[tab]();window.scrollTo(0,y)}

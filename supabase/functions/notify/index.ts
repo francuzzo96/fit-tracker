@@ -62,7 +62,7 @@ const addD = (d: string, k: number) => new Date(Date.parse(d + "T12:00:00Z") + k
 type Ev = { d: string; s?: string; e?: string; n: string; src?: number; sleep?: number };
 function freeSlot(evs: Ev[]) {
   const E = evs.filter((x) => x.s && x.e).map((x) => [mi(x.s!), x.sleep ? Math.min(1439, mi(x.e!) + 480) : mi(x.e!)]).sort((a, b) => a[0] - b[0]);
-  let cur = 360; const gaps: number[][] = [];
+  let cur = 540; const gaps: number[][] = [];
   for (const b of E.concat([[1320, 1320]])) { if (b[0] - cur >= 75) gaps.push([cur, b[0]]); cur = Math.max(cur, b[1]); }
   const ev = (x: number[]) => x[1] - Math.max(x[0], 1020) >= 75;
   const g = gaps.find(ev) || gaps.sort((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];

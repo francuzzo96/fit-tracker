@@ -191,9 +191,17 @@ const mi=t=>{const a=t.split(":");return +a[0]*60+ +a[1]};
 const hm=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
 const wd=d=>(new Date(d+"T12:00").getDay()+6)%7;
 const ld=x=>new Date(x-x.getTimezoneOffset()*6e4).toISOString().slice(0,10);
-const evOn=d=>S.ev.filter(x=>x.d==d).sort((a,b)=>a.s<b.s?-1:1);
+/* Turni a rotazione: S.rot={types:{M:{n,s,e}},seq:"MMPP…",start:"YYYY-MM-DD" (giorno del primo turno della sequenza)}; S.rotx={data:codice} corregge un singolo giorno */
+const ROT0={M:{n:"Mattina",s:"06:00",e:"14:00"},P:{n:"Pomeriggio",s:"14:00",e:"22:00"},N:{n:"Notte",s:"22:00",e:"06:00"},R:{n:"Riposo",s:"",e:""},F:{n:"Ferie",s:"",e:""},X:{n:"Malattia",s:"",e:""}};
+const addD=(d,k)=>ld(new Date(Date.parse(d+"T12:00")+k*864e5));
+function shiftOn(d){const R=S.rot;if(!R||!R.seq||!R.start)return null;const T={...ROT0,...R.types},x=(S.rotx||{})[d];
+ const L=R.seq.length,i=Math.round((Date.parse(d+"T12:00")-Date.parse(R.start+"T12:00"))/864e5),k=x||R.seq[((i%L)+L)%L];return T[k]?{k,...T[k],fix:!!x}:null}
+function rotEv(d){const out=[],t=shiftOn(d),y=shiftOn(addD(d,-1));
+ if(y&&y.s&&y.e&&y.e<=y.s)out.push({id:"r0"+d,d,s:"00:00",e:y.e,n:y.n+" (fine)",rot:1,sleep:1});
+ if(t)out.push({id:"r1"+d,d,s:t.s,e:t.s&&t.e?(t.e<=t.s?"23:59":t.e):"",n:t.n,rot:1,k:t.k,fix:t.fix});return out}
+const evOn=d=>S.ev.filter(x=>x.d==d).concat(rotEv(d)).sort((a,b)=>a.s<b.s?-1:1);
 const exOn=d=>S.ex.filter(e=>(e.days||[]).includes(wd(d)));
-function freeSlot(d){const E=evOn(d).filter(x=>x.s&&x.e).map(x=>[mi(x.s),mi(x.e)]);let cur=360;const gaps=[];
+function freeSlot(d){const E=evOn(d).filter(x=>x.s&&x.e).map(x=>[mi(x.s),x.sleep?Math.min(1439,mi(x.e)+480):mi(x.e)]);/* dopo la notte: 8 ore per dormire */let cur=360;const gaps=[];
  E.concat([[1320,1320]]).forEach(b=>{if(b[0]-cur>=75)gaps.push([cur,b[0]]);cur=Math.max(cur,b[1])});
  const ev=x=>x[1]-Math.max(x[0],1020)>=75;const g=gaps.find(ev)||gaps.sort((a,b)=>b[1]-b[0]-(a[1]-a[0]))[0];if(!g)return null;
  const s=ev(g)?Math.max(g[0],1020):g[0];return hm(s)+"–"+hm(Math.min(g[1],s+90))}
@@ -211,8 +219,29 @@ function parseICS(t){t=t.replace(/\r?\n[ \t]/g,"");const out=[];
 function vAg(){const b=Date.now(),days=[...Array(7)].map((_,i)=>ld(new Date(b+i*864e5)));
  return `<h1>Agenda</h1><p class="sub">Turni, impegni e allenamenti dei prossimi 7 giorni.</p>
  <div class="card"><h2>Aggiungi impegno</h2><input id="en" placeholder="Titolo (es. Dentista)"><div class="row" style="margin-top:8px"><div><label>Giorno</label><input id="ed" type="date" value="${day()}"></div><div><label>Inizio</label><input id="es" type="time"></div><div><label>Fine</label><input id="ee" type="time"></div></div><button style="width:100%;margin-top:8px" onclick="addEv()">Aggiungi</button></div>
- <div class="card"><h2>Importa turni</h2><p class="mut" style="margin-top:0">Esporta i turni (o il calendario) in un file .ics e sceglilo qui. Un nuovo import sostituisce il precedente.</p><input id="ei" type="file" accept=".ics,text/calendar" onchange="impICS(this)"></div>
- ${days.map(d=>{const E=evOn(d),X=exOn(d),sl=freeSlot(d);return `<div class="card"><h3>${DN[wd(d)]} ${fd(d)}</h3>${E.map(x=>`<div class="item"><span>${x.s?x.s+"–"+x.e:"Tutto il giorno"} · ${esc(x.n)}</span>${x.src?"":`<button class="x" onclick="delEv('${x.id}')">✕</button>`}</div>`).join("")}${X.length?`<div class="item"><span>🏋️ ${X.map(e=>esc(e.name)).join(", ")}</span><span class="pill">${sl||"nessuna fascia"}</span></div>`:""}${!E.length&&!X.length?'<p class="mut" style="margin:6px 0 0">Giorno libero.</p>':""}</div>`}).join("")}`}
+ ${rotCard()}
+ <details class="card"><summary><b>Importa da file .ics</b></summary><p class="mut">Esporta un calendario in un file .ics e sceglilo qui. Un nuovo import sostituisce il precedente.</p><input id="ei" type="file" accept=".ics,text/calendar" onchange="impICS(this)"></details>
+ ${days.map(d=>{const E=evOn(d),X=exOn(d),sl=freeSlot(d);return `<div class="card"><h3>${DN[wd(d)]} ${fd(d)}</h3>${E.map(x=>`<div class="item"><span>${x.rot&&!x.sleep?`<b>${esc(x.n)}</b>${x.s?" "+x.s+"–"+(x.e=="23:59"?shiftOn(d).e:x.e):""}${x.fix?' <span class="pill">modificato</span>':""}`:`${x.s?x.s+"–"+x.e:"Tutto il giorno"} · ${esc(x.n)}`}</span>${x.rot?(x.sleep?"":fixSel(d,x)):x.src?"":`<button class="x" onclick="delEv('${x.id}')">✕</button>`}</div>`).join("")}${X.length?`<div class="item"><span>🏋️ ${X.map(e=>esc(e.name)).join(", ")}</span><span class="pill">${sl||"nessuna fascia"}</span></div>`:""}${!E.length&&!X.length?'<p class="mut" style="margin:6px 0 0">Giorno libero.</p>':""}</div>`}).join("")}`}
+let rotEdit=0;
+function rotCard(){const R=S.rot,T={...ROT0,...(R&&R.types)};
+ if(R&&R.seq&&!rotEdit){const c={};[...R.seq].forEach(k=>c[k]=(c[k]||0)+1);
+  return `<div class="card"><h2>Turni a rotazione</h2><div class="mut">Ciclo di ${R.seq.length} giorni${R.seq.length%7?"":` (${R.seq.length/7} settimane)`} · ${Object.keys(c).map(k=>`${c[k]} ${esc((T[k]||{n:k}).n.toLowerCase())}`).join(", ")}</div>
+  <div class="mut">${["M","P","N"].filter(k=>c[k]).map(k=>`${T[k].n} ${T[k].s}–${T[k].e}`).join(" · ")}</div>
+  <div class="row" style="margin-top:8px"><button class="g" onclick="rotEdit=1;render()">Modifica schema</button>${Object.keys(S.rotx||{}).length?`<button class="g" onclick="clrFix()">Annulla modifiche ai giorni (${Object.keys(S.rotx).length})</button>`:""}</div></div>`}
+ const seq=R&&R.seq?R.seq.match(/.{1,7}/g).join(" "):"";
+ return `<div class="card"><h2>Turni a rotazione</h2><p class="mut" style="margin-top:0">Scrivi la sequenza del ciclo, un giorno per lettera: <b>M</b> mattina, <b>P</b> pomeriggio, <b>N</b> notte, <b>R</b> riposo. Gli spazi non contano: puoi scriverla una settimana alla volta.</p>
+ <textarea id="rq" rows="4" placeholder="MMPPNNR RMMPPNN …" oninput="$('rqn').textContent=rotLen()">${esc(seq)}</textarea><div id="rqn" class="mut" style="margin:4px 0 8px">${rotLen(seq)}</div>
+ <label for="rs">Giorno in cui fai il primo turno della sequenza</label><input id="rs" type="date" value="${R&&R.start||day()}">
+ ${["M","P","N"].map(k=>`<div class="row" style="margin-top:8px"><b style="flex:0 0 96px">${T[k].n}</b><input id="rt${k}s" type="time" value="${T[k].s}" aria-label="Inizio ${T[k].n}"><input id="rt${k}e" type="time" value="${T[k].e}" aria-label="Fine ${T[k].n}"></div>`).join("")}
+ <div class="row" style="margin-top:10px"><button onclick="saveRot()">Salva schema</button>${R?`<button class="g" onclick="rotEdit=0;render()">Annulla</button>`:""}</div></div>`}
+function rotLen(s){s=(s??$("rq").value).toUpperCase().replace(/[^MPNR]/g,"");return s.length?`${s.length} giorni${s.length%7?"":` = ${s.length/7} settimane`}`:"Nessun giorno ancora"}
+function saveRot(){const seq=v("rq").toUpperCase().replace(/[^MPNR]/g,"");if(!seq){alert("Scrivi almeno un giorno della sequenza.");return}
+ const types={};["M","P","N"].forEach(k=>types[k]={...ROT0[k],s:v("rt"+k+"s")||ROT0[k].s,e:v("rt"+k+"e")||ROT0[k].e});
+ S.rot={types,seq,start:v("rs")||day()};rotEdit=0;save();render()}
+function fixSel(d,x){const R=S.rot,T={...ROT0,...R.types};
+ return `<select style="width:auto;flex:0 0 auto;padding:6px" aria-label="Cambia turno del ${fd(d)}" onchange="setFix('${d}',this.value)"><option value="">Come da schema</option>${Object.keys(T).map(k=>`<option value="${k}" ${x.fix&&x.k==k?"selected":""}>${T[k].n}</option>`).join("")}</select>`}
+function setFix(d,k){S.rotx=S.rotx||{};if(k)S.rotx[d]=k;else delete S.rotx[d];save();render()}
+function clrFix(){if(confirm("Tornare allo schema per tutti i giorni modificati?")){S.rotx={};save();render()}}
 function addEv(){const nm=v("en"),d=v("ed"),s=v("es"),e=v("ee");if(!nm||!d)return;S.ev.push({id:uid(),d,s,e:e||s,n:nm});save();render()}
 function delEv(id){S.ev=S.ev.filter(x=>x.id!=id);save();render()}
 function impICS(el){const f=el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const L=parseICS(r.result);S.ev=S.ev.filter(x=>!x.src).concat(L);save();alert(L.length+" eventi importati.");render()};r.readAsText(f)}

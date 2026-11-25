@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Il mio allenamento</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -82,10 +83,79 @@ summary{cursor:pointer}
 <script>
 const K="fit-tracker-v1";let S=null;
 try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
-S=S||{p:{sex:"m",age:30,h:175,act:1.45,goal:0},w:[],ex:[],food:[],water:{},steps:{},runs:[]};
-S.meas=S.meas||[];S.ev=S.ev||[];S.docs=S.docs||[];let dtab="imp";let gd=(new Date().getDay()+6)%7;
+function norm(x){x=x||{p:{sex:"m",age:30,h:175,act:1.45,goal:0},w:[],ex:[],food:[],water:{},steps:{},runs:[]};
+ ["w","ex","food","runs","meas","ev","docs"].forEach(k=>x[k]=x[k]||[]);x.water=x.water||{};x.steps=x.steps||{};return x}
+S=norm(S);let dtab="imp";let gd=(new Date().getDay()+6)%7;
 let tab="oggi",tI=null;
-const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert("Memoria piena: elimina qualche foto.")}};
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert("Memoria piena: elimina qualche foto.")}syncSoon()};
+
+/* Sincronizzazione con Supabase: i dati stanno sul dispositivo e in una copia online protetta dal tuo accesso.
+   SB_URL e SB_KEY sono l'indirizzo del progetto e la chiave pubblica (fatta per stare nel browser: i dati li protegge la Row Level Security). */
+const SB_URL="https://hzjedbtpdxhpfwrawwhn.supabase.co",SB_KEY="sb_publishable_0QLTTjFdVaLFb836rxiNEw_MEzsr39G";
+const KB=K+"-base",KR=K+"-rev";let authReady=0,sb=null,me=null,sync={st:"off",at:0,err:""},sT=null,busy=null;
+const jeq=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+const byId=A=>Array.isArray(A)&&A.every(o=>o&&typeof o=="object"&&"id" in o);
+/* Unione a tre vie: base = ultima copia sincronizzata. Vince la modifica fatta da una parte sola; se cambia da entrambe, vince questo dispositivo. */
+function merge3(b,l,r){if(jeq(l,r))return l;if(jeq(b,l))return r;if(jeq(b,r))return l;
+ if(byId(l)&&byId(r)){const B=new Map((byId(b)?b:[]).map(o=>[o.id,o])),R=new Map(r.map(o=>[o.id,o])),L=new Map(l.map(o=>[o.id,o])),out=[];
+  l.forEach(o=>{if(R.has(o.id))out.push(merge3(B.get(o.id),o,R.get(o.id)));else if(!B.has(o.id)||!jeq(B.get(o.id),o))out.push(o)});
+  r.forEach(o=>{if(!L.has(o.id)&&(!B.has(o.id)||!jeq(B.get(o.id),o)))out.push(o)});return out}
+ const ob=x=>x&&typeof x=="object"&&!Array.isArray(x);
+ if(ob(l)&&ob(r)){const bb=ob(b)?b:{},out={};new Set([...Object.keys(l),...Object.keys(r)]).forEach(k=>{
+  if(!(k in r)){if(!(k in bb)||!jeq(bb[k],l[k]))out[k]=l[k]}else if(!(k in l)){if(!(k in bb)||!jeq(bb[k],r[k]))out[k]=r[k]}else out[k]=merge3(bb[k],l[k],r[k])});return out}
+ return b==null?r:l}/* senza una base comune (primo accesso su un dispositivo) vincono i dati online */
+const getBase=()=>{try{return JSON.parse(localStorage.getItem(KB))}catch(e){return null}};
+function setBase(d,rev){try{localStorage.setItem(KB,JSON.stringify(d));localStorage.setItem(KR,rev||"")}catch(e){}}
+function setSync(st,err){sync={st,at:st=="ok"?Date.now():sync.at,err:err||""};const el=$("syncst");if(el)el.innerHTML=syncTxt()}
+function syncTxt(){const t=sync.at?new Date(sync.at).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"}):"";
+ return {off:"Sincronizzazione non attiva",run:"Sincronizzo…",ok:`✓ Sincronizzato alle ${t}`,net:"Offline: sincronizzo appena torna la connessione",err:`<span style="color:var(--bad)">Errore: ${esc(sync.err)}</span>`}[sync.st]}
+function syncSoon(){if(!me)return;clearTimeout(sT);sT=setTimeout(syncNow,1200)}
+async function syncNow(){if(!me)return;if(busy)return busy;busy=(async()=>{
+ if(!navigator.onLine){setSync("net");return}setSync("run");
+ try{for(let i=0;i<3;i++){
+  const {data:row,error}=await sb.from("fit_data").select("data,updated_at").eq("user_id",me.id).maybeSingle();if(error)throw error;
+  const rev=localStorage.getItem(KR)||"";let local=S;
+  if(row&&row.updated_at!==rev){const m=norm(merge3(getBase(),S,row.data));const ch=!jeq(m,S);S=m;try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}setBase(row.data,row.updated_at);if(ch)render();local=S;
+   if(jeq(S,row.data))break}
+  else if(row&&jeq(S,getBase()))break;
+  /* scrivo solo se nessun altro dispositivo ha scritto nel frattempo, altrimenti riunisco e riprovo */
+  const q=row?sb.from("fit_data").update({data:local}).eq("user_id",me.id).eq("updated_at",row.updated_at):sb.from("fit_data").insert({user_id:me.id,data:local});
+  const {data:w,error:e2}=await q.select("updated_at");if(e2&&e2.code!="23505")throw e2;
+  if(w&&w.length){setBase(local,w[0].updated_at);break}}
+  setSync("ok");upFiles()}catch(e){setSync(navigator.onLine?"err":"net",e.message||String(e))}})();
+ try{await busy}finally{busy=null}}
+/* File dei referti: copia online in referti/<utente>/<id>, scaricata quando serve su un altro dispositivo */
+async function upFiles(){if(!me)return;let ch=0;for(const d of S.docs)for(const f of d.files){if(f.up)continue;
+ try{const b=await fget(f.id);if(!b)continue;const {error}=await sb.storage.from("referti").upload(me.id+"/"+f.id,b,{contentType:f.type,upsert:true});if(error)throw error;f.up=1;ch=1}catch(e){}}
+ if(ch)save()}
+async function fgetAny(id){let b=null;try{b=await fget(id)}catch(e){}if(b||!me)return b;
+ const {data,error}=await sb.storage.from("referti").download(me.id+"/"+id);if(error)return null;try{await fput(id,data)}catch(e){}return data}
+async function login(up){const em=v("lem"),pw=$("lpw").value,o=$("lmsg");if(!em||!pw){o.textContent="Scrivi email e password.";return}
+ o.textContent=up?"Creo l’account…":"Accedo…";
+ const {data,error}=up?await sb.auth.signUp({email:em,password:pw,options:{emailRedirectTo:location.href.split("#")[0]}}):await sb.auth.signInWithPassword({email:em,password:pw});
+ if(error){o.innerHTML=`<span style="color:var(--bad)">${esc(error.message=="Invalid login credentials"?"Email o password non corrette.":error.message)}</span>`;return}
+ if(up&&!data.session)o.textContent="Ti ho mandato un’email: apri il link per confermare l’account, poi accedi qui."}
+async function forgot(){const em=v("lem");if(!em){$("lmsg").textContent="Scrivi prima la tua email.";return}
+ const {error}=await sb.auth.resetPasswordForEmail(em,{redirectTo:location.href.split("#")[0]});$("lmsg").textContent=error?error.message:"Ti ho mandato un’email per scegliere una nuova password."}
+async function logout(){if(!confirm("Uscire dall’account su questo dispositivo? I dati restano salvati online."))return;await syncNow();await sb.auth.signOut()}
+function vLogin(){return `<div style="max-width:380px;margin:8vh auto 0"><h1>Fit Tracker</h1><p class="sub">Accedi per ritrovare i tuoi dati su iPhone, iPad e computer.</p>
+ <div class="card"><label for="lem">Email</label><input id="lem" type="email" autocomplete="username" inputmode="email">
+ <label for="lpw" style="margin-top:8px">Password</label><input id="lpw" type="password" autocomplete="current-password" onkeydown="if(event.key=='Enter')login(0)">
+ <button style="width:100%;margin-top:12px" onclick="login(0)">Accedi</button>
+ <div class="row" style="margin-top:8px"><button class="g" onclick="login(1)">Crea account</button><button class="g" onclick="forgot()">Password dimenticata</button></div>
+ <p id="lmsg" class="mut" style="margin:10px 0 0" role="status"></p></div>
+ <p class="mut">I dati sono salvati sul dispositivo e in una copia online in Europa, visibile solo dopo l’accesso con il tuo account.</p></div>`}
+function accCard(){if(!sb)return `<div class="card"><h2>Account</h2><p class="mut" style="margin:0">${SB_URL?"Sincronizzazione non disponibile: serve la connessione per caricarla la prima volta.":"Sincronizzazione non ancora collegata: i dati restano solo su questo dispositivo."}</p></div>`;
+ return `<div class="card"><h2>Account</h2><div class="kv"><span>Accesso</span><span>${esc(me?me.email:"")}</span></div><p id="syncst" class="mut" style="margin:6px 0 10px" role="status">${syncTxt()}</p>
+ <div class="row"><button class="g" onclick="syncNow()">Sincronizza ora</button><button class="g" onclick="logout()">Esci</button></div></div>`}
+async function startSync(){if(!SB_URL||!window.supabase){render();return}
+ sb=supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+ sb.auth.onAuthStateChange((ev,ses)=>{
+  if(ev=="PASSWORD_RECOVERY"){setTimeout(async()=>{const p=prompt("Scegli la nuova password (almeno 6 caratteri):");if(p){const {error}=await sb.auth.updateUser({password:p});alert(error?error.message:"Password aggiornata.")}},0)}
+  const was=me&&me.id;me=ses?ses.user:null;
+  if(me&&me.id!==was){const a=localStorage.getItem(K+"-acct");if(a&&a!==me.id){setBase(null,"");}localStorage.setItem(K+"-acct",me.id);setTimeout(syncNow,0)}
+  if(!me)setSync("off");authReady=1;render()});
+ addEventListener("online",syncNow);setInterval(()=>{if(me&&!document.hidden)syncNow()},60000)}
 const $=id=>document.getElementById(id);
 const v=id=>$(id)?$(id).value.trim():"";
 const n=id=>parseFloat(v(id).replace(",","."))||0;
@@ -203,7 +273,7 @@ function vProg(){const p=S.p,W=S.w.slice().reverse(),first=S.w[0],l=S.w[S.w.leng
  <div class="card"><h2>I tuoi dati</h2><div class="row"><div><label>Sesso</label><select id="ps"><option value="m" ${p.sex=="m"?"selected":""}>Uomo</option><option value="f" ${p.sex=="f"?"selected":""}>Donna</option></select></div><div><label>Età</label><input id="pa" type="number" value="${p.age}"></div><div><label>Altezza (cm)</label><input id="ph" type="number" value="${p.h}"></div></div>
  <div class="row" style="margin-top:8px"><div><label>Attività</label><select id="pc">${[[1.2,"Sedentario"],[1.375,"Leggera (1-3 allenamenti)"],[1.45,"Media (3-5 allenamenti)"],[1.65,"Alta (6-7 allenamenti)"]].map(a=>`<option value="${a[0]}" ${p.act==a[0]?"selected":""}>${a[1]}</option>`).join("")}</select></div>
  <div><label>Obiettivo</label><select id="pg"><option value="-400" ${p.goal==-400?"selected":""}>Dimagrire</option><option value="0" ${p.goal==0?"selected":""}>Mantenere</option><option value="300" ${p.goal==300?"selected":""}>Aumentare massa</option></select></div></div>
- <button style="width:100%;margin-top:8px" onclick="saveP()">Salva dati</button></div>`}
+ <button style="width:100%;margin-top:8px" onclick="saveP()">Salva dati</button></div>${accCard()}`}
 function saveP(){S.p={sex:v("ps"),age:n("pa")||30,h:n("ph")||175,act:parseFloat(v("pc")),goal:parseInt(v("pg"))};save();render()}
 function delW(id){S.w=S.w.filter(x=>x.id!=id);save();render()}
 function addWeight(){const kg=n("wk");if(!kg)return;const f=$("wf").files[0];
@@ -317,20 +387,22 @@ async function addDoc(){const raw=v("dj"),J=pj(raw),nm=v("dn"),t=v("dt"),fs=[...
   if(ty=="res"&&o.ref){const im=S.docs.find(d=>d.t=="imp"&&d.f&&d.f.nre==o.ref);if(im)im.done=1}});
  save();const bad=L.reduce((s,o)=>s+(o.vals||[]).filter(vst).length,0);dtab=bad?"val":(t=="imp"?"imp":"res");render();window.scrollTo(0,0)}catch(e){alert("Impossibile salvare i file su questo dispositivo.")}}
 function togDone(id){const d=S.docs.find(x=>x.id==id);d.done=d.done?0:1;save();render()}
-async function delDoc(id){if(!confirm("Eliminare il documento e i suoi file?"))return;const d=S.docs.find(x=>x.id==id);for(const f of d.files){try{await fdel(f.id)}catch(e){}}S.docs=S.docs.filter(x=>x.id!=id);save();render()}
+async function delDoc(id){if(!confirm("Eliminare il documento e i suoi file?"))return;const d=S.docs.find(x=>x.id==id);for(const f of d.files){try{await fdel(f.id)}catch(e){}}if(me&&d.files.length)try{await sb.storage.from("referti").remove(d.files.map(f=>me.id+"/"+f.id))}catch(e){}S.docs=S.docs.filter(x=>x.id!=id);save();render()}
 async function viewDoc(fid){let m;S.docs.forEach(d=>d.files.forEach(f=>{if(f.id==fid)m=f}));
- try{const b=await fget(fid);if(!b)throw 0;const u=URL.createObjectURL(b),V=$("viewer");
+ try{const b=await fgetAny(fid);if(!b)throw 0;const u=URL.createObjectURL(b),V=$("viewer");
  V.innerHTML=`<div class="row" style="flex:0 0 auto;margin-bottom:8px;flex-wrap:nowrap"><span style="color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name)}</span><button onclick="closeV()" style="flex:0 0 auto">Chiudi</button></div>`+(m.type=="application/pdf"?`<iframe src="${u}" title="PDF"></iframe>`:`<img src="${u}" alt="Documento">`);V.style.display="flex";V.dataset.u=u}catch(e){alert("File non trovato su questo dispositivo.")}}
 function closeV(){const V=$("viewer");try{URL.revokeObjectURL(V.dataset.u)}catch(e){}V.style.display="none";V.innerHTML=""}
 
 /* Navigazione */
 const TABS=[["oggi","💧","Oggi"],["gym","🏋️","Palestra"],["diet","🍽️","Dieta"],["ag","📅","Agenda"],["prog","📈","Progressi"],["doc","🩺","Referti"]];
 function render(){const y=window.scrollY;
+ if(sb&&!me){$("nav").style.display="none";$("app").innerHTML=authReady?vLogin():'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>';return}
+ $("nav").style.display="";
  const na=alertsN();$("nav").innerHTML=TABS.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')" aria-label="${t[2]}${t[0]=="doc"&&na?`, ${na} avvisi`:""}"><span>${t[1]}</span>${t[2]}${t[0]=="doc"&&na?`<i class="dot">${na}</i>`:""}</button>`).join("");
  $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc}[tab]();window.scrollTo(0,y)}
 function go(t){tab=t;render();window.scrollTo(0,0)}
-render();
-document.addEventListener("visibilitychange",()=>{if(!document.hidden)render()});
+startSync();render();
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){render();syncNow()}});
 if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol))navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 </body>

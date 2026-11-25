@@ -70,6 +70,10 @@ summary{cursor:pointer}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:20px;font-weight:600;opacity:0;transition:opacity .3s;z-index:30;pointer-events:none}
 .ibf{display:flex;align-items:center;justify-content:center;font:600 14px Inter,sans-serif;border:1px solid var(--line);border-radius:9px;padding:10px 14px;color:var(--mut);cursor:pointer;margin:0}
 .ibv{margin-top:6px;flex-wrap:nowrap;gap:4px}.ibv>input{min-width:0;padding:8px 6px;font-size:14px}
+#scan{display:none;position:fixed;inset:0;background:#000;z-index:26;flex-direction:column;gap:10px;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))}
+.scanbox{position:relative;flex:1;min-height:0;border-radius:12px;overflow:hidden;background:#111}.scanbox video{width:100%;height:100%;object-fit:cover}
+.scanbox i{position:absolute;left:10%;right:10%;top:32%;bottom:32%;border:3px solid #fff;border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
+.sb2{color:#fff !important;border-color:#666 !important}
 .ibpre{white-space:pre-wrap;font-size:12px;max-height:200px;overflow:auto;background:var(--bg);padding:8px;border-radius:8px}
 .mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.mh{text-align:center;font-size:11px;color:var(--mut);font-weight:600;padding-bottom:2px}
 .mc{background:var(--bg);color:var(--ink);border:2px solid transparent;border-radius:9px;padding:4px 0 5px;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:50px;font:600 13px Inter,sans-serif;min-width:0}
@@ -88,6 +92,7 @@ summary{cursor:pointer}
 <div id="timer"><span id="tt"></span><button onclick="stopT()">Chiudi</button></div>
 <div id="viewer"></div>
 <div id="inbox" role="dialog" aria-label="Casella"></div>
+<div id="scan" role="dialog" aria-label="Lettore codici a barre"></div>
 <button id="fab" onclick="ibOpen()" aria-label="Casella: aggiungi testo, voce, PDF o foto">＋</button>
 <div id="toast" role="status" aria-live="polite"></div>
 <main id="app"></main>
@@ -96,7 +101,7 @@ summary{cursor:pointer}
 const K="fit-tracker-v1";let S=null;
 try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
 function norm(x){x=x||{p:{sex:"m",age:30,h:175,act:1.45,goal:0},w:[],ex:[],food:[],water:{},steps:{},runs:[]};
- ["w","ex","food","runs","meas","ev","docs"].forEach(k=>x[k]=x[k]||[]);x.water=x.water||{};x.steps=x.steps||{};return x}
+ ["w","ex","food","runs","meas","ev","docs"].forEach(k=>x[k]=x[k]||[]);x.water=x.water||{};x.steps=x.steps||{};x.prod=x.prod||{};return x}
 S=norm(S);let dtab="imp";let gd=(new Date().getDay()+6)%7;
 let tab="oggi",tI=null;
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert("Memoria piena: elimina qualche foto.")}syncSoon()};
@@ -341,9 +346,54 @@ function vDiet(){const t=day(),tg=target(),L=S.food.filter(f=>f.d==t);
  return `<h1>Dieta</h1><p class="sub">Obiettivo calcolato dai tuoi dati personali (scheda Progressi).</p>
  <div class="card"><div class="big" style="color:var(--kc)">${s("k")} <span class="mut" style="font:500 15px Inter">/ ${tg.k} kcal</span></div>${bar(s("k"),tg.k,"var(--kc)")}
  ${m("Proteine",s("pr"),tg.pr,"var(--ac)")}${m("Carboidrati",s("c"),tg.c,"var(--kc)")}${m("Grassi",s("f"),tg.f,"var(--wat)")}</div>
- <div class="card"><h2>Aggiungi alimento</h2><input id="fn" placeholder="Cosa hai mangiato"><div class="row" style="margin-top:8px"><div><label>Kcal</label><input id="fk" type="number" inputmode="numeric"></div><div><label>Prot. (g)</label><input id="fp" type="number" inputmode="decimal"></div><div><label>Carb. (g)</label><input id="fc" type="number" inputmode="decimal"></div><div><label>Grassi (g)</label><input id="ff" type="number" inputmode="decimal"></div></div>
+ <button style="width:100%;margin-bottom:12px;padding:14px" onclick="scanOpen()">📷 Scansiona codice a barre</button>
+ ${prodList()}
+ <div class="card"><h2>Aggiungi a mano</h2><input id="fn" placeholder="Cosa hai mangiato"><div class="row" style="margin-top:8px"><div><label>Kcal</label><input id="fk" type="number" inputmode="numeric"></div><div><label>Prot. (g)</label><input id="fp" type="number" inputmode="decimal"></div><div><label>Carb. (g)</label><input id="fc" type="number" inputmode="decimal"></div><div><label>Grassi (g)</label><input id="ff" type="number" inputmode="decimal"></div></div>
  <p class="mut" style="margin:8px 0">Se lasci le kcal vuote le calcolo dai macro.</p><button style="width:100%" onclick="addFood()">Aggiungi</button></div>
  <div class="card"><h2>Oggi</h2>${L.map(f=>`<div class="item"><div><b>${esc(f.n)}</b><div class="mut">${f.k} kcal · P ${f.pr} · C ${f.c} · G ${f.f}</div></div><button class="x" onclick="delFood('${f.id}')">Elimina</button></div>`).join("")||'<p class="mut">Ancora nulla registrato oggi.</p>'}</div>`}
+/* Codici a barre e QR: lettura con la fotocamera (ZXing, sul dispositivo) e dati del prodotto da Open Food Facts,
+   database libero che riceve solo il numero del codice. I prodotti usati restano in S.prod per l'uso offline. */
+const ZX="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1/umd/zxing-browser.min.js";let scanCtl=null;
+const stopCam=()=>{try{scanCtl&&scanCtl.stop()}catch(e){}scanCtl=null};
+async function scanOpen(){const B=$("scan");B.style.display="flex";
+ B.innerHTML=`<div class="row" style="flex:0 0 auto;flex-wrap:nowrap"><b style="color:#fff;flex:1">Inquadra il codice a barre o il QR</b><button onclick="scanClose()" style="flex:0 0 auto">Chiudi</button></div>
+ <div class="scanbox"><video id="scv" playsinline muted></video><i></i></div><p id="scst" style="color:#ddd;margin:0" role="status">Avvio la fotocamera…</p>
+ <div class="row" style="flex:0 0 auto"><label class="ibf sb2">📷 Usa una foto<input type="file" accept="image/*" hidden onchange="scanPhoto(this)"></label><button class="g sb2" onclick="scanType()">⌨️ Scrivi il codice</button></div>`;
+ try{await loadJS(ZX);const r=new ZXingBrowser.BrowserMultiFormatReader();
+  scanCtl=await r.decodeFromConstraints({video:{facingMode:"environment"}},$("scv"),res=>{if(res&&scanCtl){stopCam();if(navigator.vibrate)navigator.vibrate(60);scanGot(res.getText())}});
+  if($("scst"))$("scst").textContent="Tieni il codice dentro il riquadro, ben illuminato."}
+ catch(e){if($("scst"))$("scst").textContent=/NotAllowed|Permission/i.test(e.name+e.message)?"Consenti l'uso della fotocamera, oppure usa una foto o scrivi il codice.":"Fotocamera non disponibile: usa una foto o scrivi il codice."}}
+function scanClose(){stopCam();const B=$("scan");B.style.display="none";B.innerHTML=""}
+async function scanPhoto(el){const f=el.files[0];if(!f)return;$("scst").textContent="Leggo la foto…";
+ try{await loadJS(ZX);const u=URL.createObjectURL(f),res=await new ZXingBrowser.BrowserMultiFormatReader().decodeFromImageUrl(u);URL.revokeObjectURL(u);stopCam();scanGot(res.getText())}
+ catch(e){$("scst").textContent="Non trovo un codice nella foto: avvicinati e riprova."}}
+function scanType(){const c=prompt("Scrivi il numero sotto il codice a barre:");if(c&&c.trim()){stopCam();scanGot(c.trim())}}
+async function scanGot(code){scanClose();const bc=(code.match(/^\d{8,14}$/)||[])[0]||(code.match(/(?:openfoodfacts\.org\/product\/|\/01\/)(\d{8,14})/)||[])[1];
+ if(!bc){prodSheet({raw:code});return}S.prod=S.prod||{};if(S.prod[bc]){prodSheet({bc,p:S.prod[bc]});return}
+ prodSheet({bc,loading:1});
+ try{const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${bc}.json?fields=product_name,product_name_it,brands,nutriments,serving_quantity`),j=await r.json();
+  if(j.status!=1||!j.product){prodSheet({bc,p:null});return}const P=j.product,N=P.nutriments||{},k=N["energy-kcal_100g"]??(N.energy_100g!=null?N.energy_100g/4.184:null),r1=x=>x==null?"":Math.round(x*10)/10;
+  prodSheet({bc,p:{n:((P.product_name_it||P.product_name||"Prodotto").trim()+(P.brands?" · "+P.brands.split(",")[0].trim():"")).slice(0,80),k:k==null?"":Math.round(k),p:r1(N.proteins_100g),c:r1(N.carbohydrates_100g),f:r1(N.fat_100g),sv:+P.serving_quantity||""},off:1})}
+ catch(e){prodSheet({bc,p:null,err:navigator.onLine?"Open Food Facts non risponde adesso: inserisci i valori dall'etichetta.":"Sei offline e questo prodotto non è ancora salvato: inserisci i valori dall'etichetta."})}}
+function prodSheet(o){const B=$("inbox");B.style.display="block";let h;
+ if(o.raw)h=`<div class="card"><h2>QR letto</h2><p style="word-break:break-all">${/^https?:\/\//.test(o.raw)?`<a href="${esc(o.raw)}" target="_blank" rel="noopener">${esc(o.raw)}</a>`:esc(o.raw)}</p><p class="mut">Non è il codice di un alimento.</p></div>`;
+ else if(o.loading)h=`<div class="card"><p class="mut" style="margin:0">Cerco il prodotto ${esc(o.bc)}…</p></div>`;
+ else{const p=o.p||{n:"",k:"",p:"",c:"",f:"",sv:""},g=p.sv||100;
+  h=`<div class="card"><h2>${o.p?esc(p.n||"Prodotto"):"Prodotto non trovato"}</h2>${o.err?`<p style="color:var(--bad);margin-top:0">${esc(o.err)}</p>`:!o.p?'<p class="mut" style="margin-top:0">Inserisci una volta i valori per 100 g dall\'etichetta: la prossima volta lo riconosco subito.</p>':o.off?'<p class="mut" style="margin-top:0">Dati da Open Food Facts: controllali con l\'etichetta.</p>':'<p class="mut" style="margin-top:0">Prodotto già salvato.</p>'}
+  <label for="pn">Nome</label><input id="pn" value="${esc(p.n)}" placeholder="Es. Yogurt greco 0%">
+  <label style="margin-top:8px">Valori per 100 g</label><div class="row"><div><label for="pk">Kcal</label><input id="pk" type="number" inputmode="decimal" value="${p.k}" oninput="prodCalc()"></div><div><label for="pp">Prot.</label><input id="pp" type="number" inputmode="decimal" value="${p.p}" oninput="prodCalc()"></div><div><label for="pc">Carb.</label><input id="pc" type="number" inputmode="decimal" value="${p.c}" oninput="prodCalc()"></div><div><label for="pf">Grassi</label><input id="pf" type="number" inputmode="decimal" value="${p.f}" oninput="prodCalc()"></div></div>
+  <label for="pg" style="margin-top:8px">Quanti grammi hai mangiato</label><input id="pg" type="number" inputmode="decimal" value="${g}" oninput="prodCalc()"><div class="row" style="margin-top:6px;flex-wrap:nowrap;gap:6px">${[30,50,100,150,200].map(x=>`<button class="g" style="min-width:0;padding:8px 0" onclick="$('pg').value=${x};prodCalc()">${x} g</button>`).join("")}</div>
+  <div id="ptot" class="big" style="color:var(--kc);margin-top:10px"></div><div id="ptm" class="mut"></div>
+  <button style="width:100%;margin-top:12px" onclick="prodAdd('${esc(o.bc)}')">Aggiungi ai pasti di oggi</button></div>`}
+ B.innerHTML=`<main><div class="row" style="flex-wrap:nowrap;margin-bottom:12px"><h1 style="flex:1">Alimento</h1><button class="g" style="flex:0" onclick="ibClose()">Chiudi</button></div>${h}
+ ${o.raw||o.loading?"":`<button class="g" style="width:100%" onclick="ibClose();scanOpen()">📷 Scansiona un altro</button>`}</main>`;if($("pk"))prodCalc()}
+function prodVals(){const g=n("pg"),q=x=>n(x)*g/100;return {g,k:Math.round(q("pk")),p:Math.round(q("pp")),c:Math.round(q("pc")),f:Math.round(q("pf"))}}
+function prodCalc(){const x=prodVals();$("ptot").innerHTML=`${x.k} <span class="mut" style="font:500 15px Inter">kcal per ${x.g||0} g</span>`;$("ptm").textContent=`Proteine ${x.p} g · Carboidrati ${x.c} g · Grassi ${x.f} g`}
+function prodAdd(bc){const nm=v("pn"),x=prodVals();if(!nm){alert("Scrivi il nome del prodotto.");return}if(!n("pk")){alert("Inserisci le kcal per 100 g.");return}if(!x.g){alert("Inserisci i grammi.");return}
+ S.prod=S.prod||{};S.prod[bc]={n:nm,k:n("pk"),p:n("pp"),c:n("pc"),f:n("pf"),sv:x.g,used:Date.now()};
+ S.food.push({id:uid(),d:day(),n:`${nm} (${x.g} g)`,k:x.k,pr:x.p,c:x.c,f:x.f});save();ibClose();tab="diet";render();window.scrollTo(0,0);toast("Aggiunto ai pasti di oggi")}
+function prodList(){const P=Object.entries(S.prod||{}).sort((a,b)=>(b[1].used||0)-(a[1].used||0)).slice(0,8);if(!P.length)return"";
+ return `<div class="card"><h2>Prodotti salvati</h2>${P.map(([bc,p])=>`<div class="item"><button class="g" style="flex:1;text-align:left;border:0;padding:4px 0;color:var(--ink)" onclick="prodSheet({bc:'${esc(bc)}',p:S.prod['${esc(bc)}']})"><b>${esc(p.n)}</b><div class="mut">${p.k} kcal/100 g · ultima volta ${p.sv} g</div></button><span class="pill">+</span></div>`).join("")}</div>`}
 function addFood(){const nm=v("fn"),pr=n("fp"),c=n("fc"),f=n("ff");let k=n("fk");if(!k)k=Math.round(pr*4+c*4+f*9);if(!nm||!k)return;
  S.food.push({id:uid(),d:day(),n:nm,k,pr,c,f});save();render()}
 function delFood(id){S.food=S.food.filter(f=>f.id!=id);save();render()}
@@ -557,7 +607,7 @@ const ibSt=m=>{const o=$("ibst");if(o)o.textContent=m};
 function ibPaint(){const B=$("inbox");B.innerHTML=`<main><div class="row" style="flex-wrap:nowrap;margin-bottom:12px"><h1 style="flex:1">Casella</h1><button class="g" style="flex:0" onclick="ibClose()">Chiudi</button></div>
  <div class="card"><p class="mut" style="margin-top:0">Scrivi, detta o allega referti, impegnative (PDF o foto). Capisco cos'è e ti propongo dove salvarlo: tu controlli e confermi.</p>
  <textarea id="ibt" rows="4" placeholder="Es. «a pranzo 100 g di pasta e 150 g di pollo», «panca 3x8 a 70 kg», «dentista martedì alle 15», «ho bevuto mezzo litro»">${esc(IB.text)}</textarea>
- <div class="row" style="margin-top:8px"><button class="g" id="ibmic" onclick="ibMic()">🎤 Detta</button><label class="g ibf">📎 PDF o foto<input type="file" accept="application/pdf,image/*" multiple onchange="ibFiles(this)" hidden></label></div>
+ <div class="row" style="margin-top:8px"><button class="g" id="ibmic" onclick="ibMic()">🎤 Detta</button><label class="g ibf">📎 PDF o foto<input type="file" accept="application/pdf,image/*" multiple onchange="ibFiles(this)" hidden></label></div><button class="g" style="width:100%;margin-top:8px" onclick="ibClose();scanOpen()">📷 Codice a barre di un alimento</button>
  ${IB.files.length?`<div class="mut" style="margin-top:6px">${IB.files.map(f=>"📎 "+esc(f.name)).join("<br>")}</div>`:""}
  <button style="width:100%;margin-top:10px" onclick="ibRun()">Analizza</button><p id="ibst" class="mut" role="status" style="margin:8px 0 0"></p></div>
  <div id="ibres">${IB.type?ibForm():""}</div><p class="mut">La lettura avviene sul tuo telefono, senza servizi di intelligenza artificiale; quello che salvi si sincronizza nel tuo spazio come il resto dei dati. Per la prima foto o il primo PDF scansionato l'app scarica il lettore (qualche MB).</p></main>`}

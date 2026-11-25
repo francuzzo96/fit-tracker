@@ -122,7 +122,7 @@ async function syncNow(){if(!me)return;if(busy)return busy;busy=(async()=>{
   const q=row?sb.from("fit_data").update({data:local}).eq("user_id",me.id).eq("updated_at",row.updated_at):sb.from("fit_data").insert({user_id:me.id,data:local});
   const {data:w,error:e2}=await q.select("updated_at");if(e2&&e2.code!="23505")throw e2;
   if(w&&w.length){setBase(local,w[0].updated_at);break}}
-  setSync("ok");upFiles()}catch(e){setSync(navigator.onLine?"err":"net",e.message||String(e))}})();
+  setSync("ok");upFiles();calSync()}catch(e){setSync(navigator.onLine?"err":"net",e.message||String(e))}})();
  try{await busy}finally{busy=null}}
 /* File dei referti: copia online in referti/<utente>/<id>, scaricata quando serve su un altro dispositivo */
 async function upFiles(){if(!me)return;let ch=0;for(const d of S.docs)for(const f of d.files){if(f.up)continue;
@@ -196,7 +196,7 @@ const ROT0={M:{n:"Mattina",s:"06:00",e:"14:00"},P:{n:"Pomeriggio",s:"14:00",e:"2
 const addD=(d,k)=>ld(new Date(Date.parse(d+"T12:00")+k*864e5));
 function shiftOn(d){const R=S.rot;if(!R||!R.seq||!R.start)return null;const T={...ROT0,...R.types},x=(S.rotx||{})[d];
  const L=R.seq.length,i=Math.round((Date.parse(d+"T12:00")-Date.parse(R.start+"T12:00"))/864e5),k=x||R.seq[((i%L)+L)%L];return T[k]?{k,...T[k],fix:!!x}:null}
-function rotEv(d){const out=[],t=shiftOn(d),y=shiftOn(addD(d,-1));
+function rotEv(d){if(S.cal&&S.cal.url)return[];const out=[],t=shiftOn(d),y=shiftOn(addD(d,-1));
  if(y&&y.s&&y.e&&y.e<=y.s)out.push({id:"r0"+d,d,s:"00:00",e:y.e,n:y.n+" (fine)",rot:1,sleep:1});
  if(t)out.push({id:"r1"+d,d,s:t.s,e:t.s&&t.e?(t.e<=t.s?"23:59":t.e):"",n:t.n,rot:1,k:t.k,fix:t.fix});return out}
 const evOn=d=>S.ev.filter(x=>x.d==d).concat(rotEv(d)).sort((a,b)=>a.s<b.s?-1:1);
@@ -213,17 +213,40 @@ function togD(id,i){const e=S.ex.find(e=>e.id==id);e.days=e.days||[];const k=e.d
 function parseICS(t){t=t.replace(/\r?\n[ \t]/g,"");const out=[];
  const p=s=>{const m=s.match(/(\d{4})(\d\d)(\d\d)(?:T(\d\d)(\d\d))?/);if(!m)return null;if(!m[4])return{d:m[1]+"-"+m[2]+"-"+m[3],t:""};if(/Z\s*$/.test(s)){const x=new Date(Date.UTC(m[1],m[2]-1,m[3],m[4],m[5]));return{d:ld(x),t:x.toTimeString().slice(0,5)}}return{d:m[1]+"-"+m[2]+"-"+m[3],t:m[4]+":"+m[5]}};
  t.split("BEGIN:VEVENT").slice(1).forEach(b=>{const g=k=>{const m=b.match(new RegExp("(?:^|\\n)"+k+"[^:\\n]*:([^\\r\\n]*)"));return m?m[1].trim():""};
- const a=p(g("DTSTART")),e=p(g("DTEND"));if(!a)return;out.push({id:uid(),d:a.d,s:a.t,e:a.t?(e&&e.d==a.d?e.t:"23:59"):"",n:g("SUMMARY")||"Evento",src:1})});return out}
+ const a=p(g("DTSTART")),e=p(g("DTEND"));if(!a)return;const id="ics"+hsh(g("UID")+"|"+g("DTSTART")),n=g("SUMMARY").replace(/\\([,;\\])/g,"$1")||"Evento";
+ out.push({id,d:a.d,s:a.t,e:a.t?(e&&e.d==a.d?e.t:"23:59"):"",n,src:1});
+ if(a.t&&e&&e.t&&e.d==addD(a.d,1)&&e.t>"00:00")out.push({id:id+"b",d:e.d,s:"00:00",e:e.t,n:n+" (fine)",src:1,sleep:1})});return out}/* turno di notte: la fine va sul giorno dopo */
 
 /* Agenda */
 function vAg(){const b=Date.now(),days=[...Array(7)].map((_,i)=>ld(new Date(b+i*864e5)));
  return `<h1>Agenda</h1><p class="sub">Turni, impegni e allenamenti dei prossimi 7 giorni.</p>
  <div class="card"><h2>Aggiungi impegno</h2><input id="en" placeholder="Titolo (es. Dentista)"><div class="row" style="margin-top:8px"><div><label>Giorno</label><input id="ed" type="date" value="${day()}"></div><div><label>Inizio</label><input id="es" type="time"></div><div><label>Fine</label><input id="ee" type="time"></div></div><button style="width:100%;margin-top:8px" onclick="addEv()">Aggiungi</button></div>
- ${rotCard()}
+ ${calCard()}${rotCard()}
  <details class="card"><summary><b>Importa da file .ics</b></summary><p class="mut">Esporta un calendario in un file .ics e sceglilo qui. Un nuovo import sostituisce il precedente.</p><input id="ei" type="file" accept=".ics,text/calendar" onchange="impICS(this)"></details>
  ${days.map(d=>{const E=evOn(d),X=exOn(d),sl=freeSlot(d);return `<div class="card"><h3>${DN[wd(d)]} ${fd(d)}</h3>${E.map(x=>`<div class="item"><span>${x.rot&&!x.sleep?`<b>${esc(x.n)}</b>${x.s?" "+x.s+"–"+(x.e=="23:59"?shiftOn(d).e:x.e):""}${x.fix?' <span class="pill">modificato</span>':""}`:`${x.s?x.s+"–"+x.e:"Tutto il giorno"} · ${esc(x.n)}`}</span>${x.rot?(x.sleep?"":fixSel(d,x)):x.src?"":`<button class="x" onclick="delEv('${x.id}')">✕</button>`}</div>`).join("")}${X.length?`<div class="item"><span>🏋️ ${X.map(e=>esc(e.name)).join(", ")}</span><span class="pill">${sl||"nessuna fascia"}</span></div>`:""}${!E.length&&!X.length?'<p class="mut" style="margin:6px 0 0">Giorno libero.</p>':""}</div>`}).join("")}`}
+/* Calendario collegato (es. turni di Supershift copiati in un calendario iCloud pubblico).
+   Il link è in S.cal e si sincronizza; lo legge la funzione Supabase "ics", che risponde solo a chi ha fatto login. */
+const hsh=s=>{let h=5381;for(const c of s)h=(h*33^c.charCodeAt(0))>>>0;return h.toString(36)};
+let calSt={at:0,n:0,err:"",run:0};
+async function calSync(force){const C=S.cal;if(!C||!C.url||!me||calSt.run)return;if(!force&&Date.now()-calSt.at<15*60e3)return;
+ calSt.run=1;calSt.err="";paintCal();
+ try{const {data,error}=await sb.functions.invoke("ics",{body:{url:C.url}});
+  if(error){let m=error.message;try{m=(await error.context.json()).error||m}catch(e){}throw new Error(m)}
+  const from=addD(day(),-31),to=addD(day(),180),L=parseICS(String(data)).filter(x=>x.d>=from&&x.d<=to);
+  const nev=S.ev.filter(x=>!x.src).concat(L);calSt.n=L.length;calSt.at=Date.now();
+  if(!jeq(nev,S.ev)){S.ev=nev;save();render()}}
+ catch(e){calSt.err=e.message||String(e)}finally{calSt.run=0;paintCal()}}
+function paintCal(){const o=$("calst");if(!o)return;o.innerHTML=calSt.run?"Aggiorno…":calSt.err?`<span style="color:var(--bad)">${esc(calSt.err)}</span>`:calSt.at?`✓ Aggiornato alle ${new Date(calSt.at).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})} · ${calSt.n} eventi`:""}
+function calCard(){const C=S.cal;if(!sb)return"";
+ if(C&&C.url)return `<div class="card"><h2>Turni da Supershift</h2><div class="mut">Calendario collegato: i turni si aggiornano da soli quando apri l’app.</div><p id="calst" class="mut" style="margin:6px 0 8px" role="status"></p>
+  <div class="row"><button class="g" onclick="calSync(1)">Aggiorna ora</button><button class="g" onclick="calOff()">Scollega</button></div></div>`;
+ return `<div class="card"><h2>Turni da Supershift</h2><p class="mut" style="margin-top:0">Incolla il link del calendario pubblico iCloud in cui Supershift copia i turni (inizia con <b>webcal://</b>).</p>
+ <input id="calu" type="url" inputmode="url" placeholder="webcal://p…-caldav.icloud.com/published/2/…" autocomplete="off"><button style="width:100%;margin-top:8px" onclick="calOn()">Collega</button><p id="calst" class="mut" style="margin:6px 0 0" role="status"></p></div>`}
+async function calOn(){const u=v("calu");if(!/^(webcal|https):\/\//i.test(u)){$("calst").textContent="Il link deve iniziare con webcal:// o https://";return}
+ S.cal={url:u};save();render();await calSync(1);if(calSt.err){S.cal=null;save();render();$("calst").innerHTML=`<span style="color:var(--bad)">${esc(calSt.err)}</span>`}}
+function calOff(){if(!confirm("Scollegare il calendario? I turni importati spariscono dall’agenda (in Supershift restano)."))return;S.cal=null;S.ev=S.ev.filter(x=>!x.src);calSt={at:0,n:0,err:"",run:0};save();render()}
 let rotEdit=0;
-function rotCard(){const R=S.rot,T={...ROT0,...(R&&R.types)};
+function rotCard(){if(S.cal&&S.cal.url)return"";const R=S.rot,T={...ROT0,...(R&&R.types)};
  if(R&&R.seq&&!rotEdit){const c={};[...R.seq].forEach(k=>c[k]=(c[k]||0)+1);
   return `<div class="card"><h2>Turni a rotazione</h2><div class="mut">Ciclo di ${R.seq.length} giorni${R.seq.length%7?"":` (${R.seq.length/7} settimane)`} · ${Object.keys(c).map(k=>`${c[k]} ${esc((T[k]||{n:k}).n.toLowerCase())}`).join(", ")}</div>
   <div class="mut">${["M","P","N"].filter(k=>c[k]).map(k=>`${T[k].n} ${T[k].s}–${T[k].e}`).join(" · ")}</div>
@@ -437,7 +460,7 @@ function render(){const y=window.scrollY;
  if(sb&&(!me||needPw)){$("nav").style.display="none";$("app").innerHTML=!authReady?'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>':me?vSetPw():vLogin();return}
  $("nav").style.display="";
  const na=alertsN();$("nav").innerHTML=TABS.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')" aria-label="${t[2]}${t[0]=="doc"&&na?`, ${na} avvisi`:""}"><span>${t[1]}</span>${t[2]}${t[0]=="doc"&&na?`<i class="dot">${na}</i>`:""}</button>`).join("");
- $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc}[tab]();window.scrollTo(0,y)}
+ $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc}[tab]();paintCal();window.scrollTo(0,y)}
 function go(t){tab=t;render();window.scrollTo(0,0)}
 startSync();render();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){render();syncNow()}});

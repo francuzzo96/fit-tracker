@@ -65,6 +65,12 @@ textarea:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
 nav button{position:relative}nav .dot{position:absolute;top:2px;left:calc(50% + 6px)}
 summary{cursor:pointer}
 .row>.pill{flex:0 0 auto}
+#inbox{display:none;position:fixed;inset:0;background:var(--bg);z-index:25;overflow:auto;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+#fab{position:fixed;right:16px;bottom:calc(78px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:50%;font-size:30px;line-height:1;padding:0;z-index:6;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:20px;font-weight:600;opacity:0;transition:opacity .3s;z-index:30;pointer-events:none}
+.ibf{display:flex;align-items:center;justify-content:center;font:600 14px Inter,sans-serif;border:1px solid var(--line);border-radius:9px;padding:10px 14px;color:var(--mut);cursor:pointer;margin:0}
+.ibv{margin-top:6px;flex-wrap:nowrap;gap:4px}.ibv>input{min-width:0;padding:8px 6px;font-size:14px}
+.ibpre{white-space:pre-wrap;font-size:12px;max-height:200px;overflow:auto;background:var(--bg);padding:8px;border-radius:8px}
 .mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.mh{text-align:center;font-size:11px;color:var(--mut);font-weight:600;padding-bottom:2px}
 .mc{background:var(--bg);color:var(--ink);border:2px solid transparent;border-radius:9px;padding:4px 0 5px;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:50px;font:600 13px Inter,sans-serif;min-width:0}
 .mc i{font-style:normal;font-size:11px;font-weight:700;color:#fff;border-radius:6px;min-width:22px;height:18px;line-height:18px;padding:0 4px}.mc.today{border-color:var(--ac)}.mc.sel{background:var(--ac);color:var(--acT)}
@@ -81,6 +87,9 @@ summary{cursor:pointer}
 <body>
 <div id="timer"><span id="tt"></span><button onclick="stopT()">Chiudi</button></div>
 <div id="viewer"></div>
+<div id="inbox" role="dialog" aria-label="Casella"></div>
+<button id="fab" onclick="ibOpen()" aria-label="Casella: aggiungi testo, voce, PDF o foto">＋</button>
+<div id="toast" role="status" aria-live="polite"></div>
 <main id="app"></main>
 <nav id="nav"></nav>
 <script>
@@ -457,16 +466,18 @@ function fillJ(){const J=pj($("dj").value),o=$("djs");if(!$("dj").value.trim()){
 async function addDoc(){const raw=v("dj"),J=pj(raw),nm=v("dn"),t=v("dt"),fs=[...$("df").files];
  if(raw&&!J){alert("Non riesco a leggere i dati incollati: copia tutto il blocco che ti ho dato.");return}
  if(!J&&!nm&&!fs.length)return;
- try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
- try{const files=[];for(const f of fs){if(f.size>25e6){alert(f.name+" è troppo grande (max 25 MB).");continue}const isI=f.type.startsWith("image/");const b=isI?await imgBlob(f):f;const id=uid();await fput(id,b);files.push({id,name:f.name,type:isI?"image/jpeg":f.type})}
- const L=J||[{f:{},vals:[]}];
- L.forEach((o,i)=>{const first=i==0,ty=first?t:o.t;
-  const doc={id:uid(),t:ty,n:(first?nm:o.n)||o.n||"Documento",d:(first?v("dd"):o.d)||o.d||day(),x:ty=="imp"?((first?v("dx"):o.x)||""):"",note:(first?v("dnote"):o.note)||"",done:0,files:first?files:[]};
-  if(ty=="imp"&&J)doc.f=o.f;if(ty!="imp"&&o.vals.length){doc.vals=o.vals;if(o.lab)doc.lab=o.lab}
+ try{const files=await storeFiles(fs);
+ const L=(J||[{f:{},vals:[]}]).map((o,i)=>i?o:{...o,t,n:nm||o.n,d:v("dd")||o.d,x:v("dx")||o.x,note:v("dnote")||o.note});
+ storeDocs(L,files);const bad=L.reduce((s,o)=>s+(o.vals||[]).filter(vst).length,0);dtab=bad?"val":(t=="imp"?"imp":"res");render();window.scrollTo(0,0)}catch(e){alert("Impossibile salvare i file su questo dispositivo.")}}
+/* Usati dal modulo Referti e dalla Casella: salvano i file in IndexedDB e i documenti in S.docs */
+async function storeFiles(fs){try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+ const files=[];for(const f of fs){if(f.size>25e6){alert(f.name+" è troppo grande (max 25 MB).");continue}const isI=f.type.startsWith("image/");const b=isI?await imgBlob(f):f;const id=uid();await fput(id,b);files.push({id,name:f.name||"file",type:isI?"image/jpeg":f.type})}return files}
+function storeDocs(L,files){L.forEach((o,i)=>{const ty=o.t||"res";
+  const doc={id:uid(),t:ty,n:o.n||"Documento",d:o.d||day(),x:ty=="imp"?(o.x||""):"",note:o.note||"",done:0,files:i?[]:files};
+  if(ty=="imp"&&o.f&&Object.values(o.f).some(z=>z&&(z.length||0)))doc.f=o.f;if(ty!="imp"&&(o.vals||[]).length){doc.vals=o.vals;if(o.lab)doc.lab=o.lab}
   const same=ty=="imp"&&doc.f&&doc.f.nre&&S.docs.find(d=>d.t=="imp"&&d.f&&d.f.nre==doc.f.nre);
   if(same){Object.assign(same,{n:doc.n,d:doc.d,x:doc.x||same.x,note:doc.note||same.note,f:doc.f});same.files=same.files.concat(doc.files)}else S.docs.push(doc);
-  if(ty=="res"&&o.ref){const im=S.docs.find(d=>d.t=="imp"&&d.f&&d.f.nre==o.ref);if(im)im.done=1}});
- save();const bad=L.reduce((s,o)=>s+(o.vals||[]).filter(vst).length,0);dtab=bad?"val":(t=="imp"?"imp":"res");render();window.scrollTo(0,0)}catch(e){alert("Impossibile salvare i file su questo dispositivo.")}}
+  if(ty=="res"&&o.ref){const im=S.docs.find(d=>d.t=="imp"&&d.f&&d.f.nre==o.ref);if(im)im.done=1}});save()}
 function togDone(id){const d=S.docs.find(x=>x.id==id);d.done=d.done?0:1;save();render()}
 async function delDoc(id){if(!confirm("Eliminare il documento e i suoi file?"))return;const d=S.docs.find(x=>x.id==id);for(const f of d.files){try{await fdel(f.id)}catch(e){}}if(me&&d.files.length)try{await sb.storage.from("referti").remove(d.files.map(f=>me.id+"/"+f.id))}catch(e){}S.docs=S.docs.filter(x=>x.id!=id);save();render()}
 async function viewDoc(fid){let m;S.docs.forEach(d=>d.files.forEach(f=>{if(f.id==fid)m=f}));
@@ -474,11 +485,135 @@ async function viewDoc(fid){let m;S.docs.forEach(d=>d.files.forEach(f=>{if(f.id=
  V.innerHTML=`<div class="row" style="flex:0 0 auto;margin-bottom:8px;flex-wrap:nowrap"><span style="color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name)}</span><button onclick="closeV()" style="flex:0 0 auto">Chiudi</button></div>`+(m.type=="application/pdf"?`<iframe src="${u}" title="PDF"></iframe>`:`<img src="${u}" alt="Documento">`);V.style.display="flex";V.dataset.u=u}catch(e){alert("File non trovato su questo dispositivo.")}}
 function closeV(){const V=$("viewer");try{URL.revokeObjectURL(V.dataset.u)}catch(e){}V.style.display="none";V.innerHTML=""}
 
+/* ===== Casella: testo, dettatura, PDF e foto letti sul dispositivo e smistati nel posto giusto (gratis, senza servizi di IA) ===== */
+const LIB={pdf:"https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.min.mjs",pdfw:"https://cdn.jsdelivr.net/npm/pdfjs-dist@4/build/pdf.worker.min.mjs",ocr:"https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"};
+const loadJS=u=>new Promise((ok,ko)=>{if(document.querySelector(`script[src="${u}"]`))return ok();const s=document.createElement("script");s.src=u;s.onload=ok;s.onerror=()=>ko(new Error("Serve la connessione per scaricare il lettore la prima volta"));document.head.appendChild(s)});
+let ocrW=null;
+async function ocr(img,msg){await loadJS(LIB.ocr);ibSt(msg||"Leggo il testo della foto…");if(!ocrW)ocrW=await Tesseract.createWorker("ita");const {data}=await ocrW.recognize(img);return data.text||""}
+async function pdfText(file){ibSt("Apro il PDF…");const pj=await import(LIB.pdf);
+ if(!pj.GlobalWorkerOptions.workerPort)pj.GlobalWorkerOptions.workerPort=new Worker(URL.createObjectURL(new Blob([`import "${LIB.pdfw}";`],{type:"text/javascript"})),{type:"module"});
+ const doc=await pj.getDocument({data:await file.arrayBuffer()}).promise,N=Math.min(doc.numPages,10);let out="";
+ for(let p=1;p<=N;p++){const pg=await doc.getPage(p),tc=await pg.getTextContent(),R={};
+  tc.items.forEach(it=>{if(!it.str.trim())return;const y=Math.round(it.transform[5]/3);(R[y]=R[y]||[]).push(it)});
+  Object.keys(R).sort((a,b)=>b-a).forEach(y=>out+=R[y].sort((a,b)=>a.transform[4]-b.transform[4]).map(i=>i.str).join(" ").replace(/\s+/g," ")+"\n")}
+ if(out.replace(/\s/g,"").length>=40)return out;
+ let t="";for(let p=1;p<=Math.min(N,4);p++){const pg=await doc.getPage(p),vp=pg.getViewport({scale:2}),c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;
+  await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;t+=await ocr(c,`PDF scansionato: leggo la pagina ${p} di ${Math.min(N,4)}…`)+"\n"}return t}
+/* --- riconoscimento --- */
+const NUM="[<>≤≥]?\\s*\\d+(?:[.,]\\d+)?",nv=s=>s==null?null:parseFloat(String(s).replace(",","."));
+const UNIT=/\/|%|^(mg|g|ng|pg|µ|μ|u|mm|mmol|fl|x10|meq|ui|iu|sec|ratio|cell|kg)/i,NOTV=/^(pag|data|tel|cod|nat|et[àa]|via|cap|ora|n\.|nr|prot|cf|tessera|referto|richiesta|accettazione)/i;
+function labVals(t){const out=[],re=new RegExp(`^\\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9 .,'()\\-/%+]*?[A-Za-zÀ-ÿ)%])\\s*[:.]*\\s+(${NUM})\\s*[*!HhLl↑↓]*\\s*([^\\s\\d<>≤≥*][^\\s]*)?\\s*(.*)$`);
+ t.split("\n").forEach(l=>{const m=l.match(re);if(!m||NOTV.test(m[1].trim())||m[1].replace(/[^A-Za-zÀ-ÿ]/g,"").length<2)return;
+  const rest=m[4]||"",r2=rest.match(/(\d+(?:[.,]\d+)?)\s*[-–÷]\s*(\d+(?:[.,]\d+)?)/),lt=rest.match(/[<≤]\s*(\d+(?:[.,]\d+)?)/),gt=rest.match(/[>≥]\s*(\d+(?:[.,]\d+)?)/);
+  const lo=r2?nv(r2[1]):gt?nv(gt[1]):null,hi=r2?nv(r2[2]):lt?nv(lt[1]):null,u=m[3]&&UNIT.test(m[3])?m[3]:"";
+  if(lo==null&&hi==null&&!u)return;out.push({n:m[1].replace(/\s+/g," ").trim().replace(/^./,c=>c.toUpperCase()).replace(/^([A-ZÀ-Ý ]{4,})$/,s=>s[0]+s.slice(1).toLowerCase()),v:m[2].replace(/\s/g,""),u,lo,hi})});return out}
+const docDate=t=>{const m=t.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/);return m?isoD(m[0].replace(/[.-]/g,"/")):""};
+function impData(t){const nre=((t.match(/N\.?\s?R\.?\s?E\.?\s*[:.]?\s*([0-9A-Z][0-9A-Z ]{12,18}[0-9A-Z])/i)||[])[1]||(t.match(/\b(\d{3}[0-9A-Z]{2}\s?\d{10})\b/)||[])[1]||"").replace(/\s/g,"");
+ const pres=[];t.split("\n").forEach(l=>{const m=l.match(/\b(\d{2}\.\d{2}(?:\.\d{1,2})?)\b\s*(.*)/);if(m&&m[2].replace(/[^A-Za-z]/g,"").length>3)pres.push({c:m[1],n:m[2].replace(/\s+\d+\s*$/,"").trim().slice(0,80),q:+((m[2].match(/\s(\d)\s*$/)||[])[1]||1)})});
+ return {nre,med:((t.match(/\b(Dott\.?(?:ssa)?|Dr\.?)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ']+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ']+)?)/)||[])[0]||""),
+  pri:((t.match(/priorit[àa][^A-Za-z]{0,6}\b([UBDP])\b/i)||[])[1]||"").toUpperCase(),ese:((t.match(/esenz\w*[^A-Z0-9]{0,4}([A-Z0-9]{2,6})/i)||[])[1]||""),
+  que:((t.match(/quesito\s+diagnostico[:\s]*([^\n]{3,120})/i)||[])[1]||"").trim(),pres}}
+/* cibi comuni: kcal, proteine, carboidrati, grassi per 100 g, porzione tipica in g */
+const FOOD=[["petto di pollo",110,23,0,1.5,150],["pollo",110,23,0,1.5,150],["tacchino",107,24,0,1,150],["manzo",150,21,0,7,150],["bistecca",150,21,0,7,200],["hamburger",250,17,0,20,150],["salmone",200,20,0,13,150],["tonno",110,25,0,1,80],["merluzzo",80,17,0,0.7,150],["pesce",100,19,0,2,150],["uova",143,12.5,0.7,10,60],["uovo",143,12.5,0.7,10,60],["albumi",48,11,0.7,0.2,100],["pasta",356,12,72,1.5,80],["riso",350,7,78,0.6,80],["pane",270,9,53,1.5,50],["piadina",310,8,50,8,110],["pizza",250,10,32,9,300],["fiocchi d'avena",389,17,66,7,40],["avena",389,17,66,7,40],["patate",80,2,18,0.1,200],["patatine",540,6,50,35,50],["legumi",120,8,20,0.5,150],["ceci",120,7,20,2,150],["fagioli",100,7,17,0.5,150],["lenticchie",115,9,20,0.4,150],["insalata",15,1.3,2,0.2,80],["verdure",25,2,4,0.3,200],["zucchine",17,1.2,3,0.3,200],["pomodori",18,0.9,3.9,0.2,150],["mela",52,0.3,14,0.2,150],["banana",89,1.1,23,0.3,120],["arancia",47,0.9,12,0.1,150],["frutta",50,0.5,12,0.2,150],["yogurt greco",97,9,4,5,150],["yogurt",65,4,5,3,125],["latte",46,3.3,4.8,1.6,200],["parmigiano",390,33,0,28,20],["mozzarella",250,18,1,19,125],["ricotta",146,9,3.5,11,100],["formaggio",350,25,1,27,50],["prosciutto",230,26,0,14,50],["bresaola",151,32,0,2,50],["olio",900,0,0,100,10],["burro di arachidi",590,25,20,50,20],["frutta secca",600,20,15,50,30],["noci",650,15,14,65,30],["mandorle",600,21,20,50,30],["biscotti",450,7,70,15,30],["cornetto",410,8,45,22,60],["cioccolato",540,6,55,32,20],["gelato",200,4,25,10,100],["proteine",380,80,8,5,30],["whey",380,80,8,5,30],["birra",43,0.5,3.6,0,330],["vino",85,0,2.6,0,150],["caffè",2,0.1,0,0,30]];
+const WN={un:1,uno:1,una:1,due:2,tre:3,quattro:4,cinque:5,sei:6,mezzo:.5,mezza:.5};
+const segs=t=>t.toLowerCase().split(/[,;\n+]|\s+e\s+|\s+con\s+|\s+più\s+/).map(s=>s.trim()).filter(Boolean);
+function foods(t){return segs(t).map(s=>{const f=FOOD.find(x=>s.includes(x[0]));const g=s.match(/(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grammi|ml)\b/),c=s.match(/\b(\d+|un|uno|una|due|tre|quattro|cinque|sei|mezz[oa])\b/);
+  if(!f&&!g)return null;let gr=g?nv(g[1])*(g[2]=="kg"?1000:1):f?f[5]*(c?(WN[c[1]]??+c[1])||1:1):0;
+  const nm=f?f[0]:s.replace(/(\d+(?:[.,]\d+)?)\s*(kg|g|gr|grammi|ml)\b|\b(di|del|della|dei|delle|ho|mangiato|bevuto|a|al|per|pranzo|cena|colazione|spuntino)\b/g,"").trim();
+  return {n:nm.replace(/^./,x=>x.toUpperCase()),g:Math.round(gr),k:f?Math.round(f[1]*gr/100):0,p:f?Math.round(f[2]*gr/100):0,c:f?Math.round(f[3]*gr/100):0,f:f?Math.round(f[4]*gr/100):0}}).filter(x=>x&&x.n)}
+const EXN=["panca piana","panca inclinata","panca","squat","stacco","trazioni","lat machine","pulley","rematore","military press","lento avanti","shoulder press","alzate laterali","curl","french press","push down","dip","affondi","leg press","leg extension","leg curl","hip thrust","calf","plank","crunch","addominali","croci","spinte"];
+function gymRows(t){return segs(t).map(s=>{const ex=S.ex.find(e=>s.includes(nk(e.name)))?.name||EXN.find(x=>s.includes(x));const sr=s.match(/(\d+)\s*(?:x|per|serie da|serie di)\s*(\d+)/),kg=s.match(/(\d+(?:[.,]\d+)?)\s*(?:kg|chili|chilo)/)||s.match(/\ba\s+(\d+(?:[.,]\d+)?)\b/);
+  if(!ex&&!sr)return null;return {n:ex?ex.replace(/^./,x=>x.toUpperCase()):"Esercizio",s:sr?+sr[1]:1,r:sr?+sr[2]:(+(s.match(/(\d+)\s*rip/)||[])[1]||0),kg:kg?nv(kg[1]):0}}).filter(Boolean)}
+function waterMl(t){t=t.toLowerCase();let m=t.match(/(\d+(?:[.,]\d+)?)\s*(ml|cl|l|litri|litro)\b/);if(m){const x=nv(m[1]);return Math.round(m[2]=="ml"?x:m[2]=="cl"?x*10:x*1000)}
+ if(/mezzo litro/.test(t))return 500;if(/un litro/.test(t))return 1000;m=t.match(/\b(\d+|un|uno|una|due|tre|quattro|cinque)\s+(bicchier|bottigliett|borracc)/);if(m)return((WN[m[1]]??+m[1])||1)*(/bicchier/.test(m[2])?250:500);return 250}
+const MESI=["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"],GG=["lunedì","martedì","mercoledì","giovedì","venerdì","sabato","domenica"];
+function evParse(t){const s=t.toLowerCase();let d=day();
+ if(/dopodomani/.test(s))d=addD(day(),2);else if(/domani/.test(s))d=addD(day(),1);
+ else{let m=s.match(/\b(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?\b/);if(m){const y=m[3]?(m[3].length==2?"20"+m[3]:m[3]):day().slice(0,4);d=`${y}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;if(!m[3]&&d<day())d=(+y+1)+d.slice(4)}
+  else if((m=s.match(new RegExp(`\\b(\\d{1,2})\\s+(${MESI.join("|")})`)))){const y=day().slice(0,4);d=`${y}-${String(MESI.indexOf(m[2])+1).padStart(2,"0")}-${m[1].padStart(2,"0")}`;if(d<day())d=(+y+1)+d.slice(4)}
+  else{const g=GG.findIndex(x=>s.includes(x.slice(0,-1))||s.includes(x));if(g>=0){let k=(g-wd(day())+7)%7||7;d=addD(day(),k)}}}
+ const hh=x=>{const m=x.match(/(\d{1,2})(?:[:.](\d{2}))?/);return m?m[1].padStart(2,"0")+":"+(m[2]||"00"):""};
+ const r=s.match(/dalle\s+(\d{1,2}(?:[:.]\d{2})?)\s+alle\s+(\d{1,2}(?:[:.]\d{2})?)/),a=s.match(/\b(?:alle|ore|h)\s*(\d{1,2}(?:[:.]\d{2})?)/)||s.match(/\b(\d{1,2}[:.]\d{2})\b/);
+ const st=r?hh(r[1]):a?hh(a[1]):"",en=r?hh(r[2]):st?String(Math.min(23,+st.slice(0,2)+1)).padStart(2,"0")+st.slice(2):"";
+ const n=t.replace(/\b(ricordami|ricorda|segna|metti|aggiungi|ho|un|una|appuntamento\s+(?:dal|dalla|con)?|oggi|domani|dopodomani|il|alle|ore|dalle|di|per)\b/gi," ").replace(/\b\d{1,2}([:.\/-]\d{1,2}){0,2}\b/g," ").replace(new RegExp(`(${GG.join("|")}|${GG.map(x=>x.slice(0,-1)).join("|")}|${MESI.join("|")})`,"gi")," ").replace(/\s+/g," ").trim();
+ return {n:(n||"Impegno").replace(/^./,x=>x.toUpperCase()),d,s:st,e:en}}
+const KW=(t,re)=>(t.match(re)||[]).length;
+function classify(t,fromFile){const s=t.toLowerCase(),vals=labVals(t),im=impData(t),sc={
+  res:vals.length*2+KW(s,/referto|laboratorio|valori di riferimento|esito|analisi|emocromo/g),
+  imp:KW(s,/impegnativa|ricetta|prescrizione|quesito|priorit|esenzion|servizio sanitario|\bssn\b|prescritt/g)*2+(im.nre?5:0)+im.pres.length,
+  vis:KW(s,/visita|diagnosi|conclusion|esame obiettivo|anamnesi|ecografi|radiografi|risonanza|\btac\b|elettrocardiogramma|terapia/g)*1.5,
+  food:fromFile?0:KW(s,/\b(mangiat\w*|pranzo|cena|colazione|spuntino|merenda|kcal|calorie)\b/g)*2+foods(t).filter(f=>f.k).length*1.5,
+  gym:fromFile?0:KW(s,/allenament|serie|ripetizion|\d+\s*x\s*\d+/g)*2+gymRows(t).filter(r=>r.n!="Esercizio").length*2,
+  water:fromFile?0:KW(s,/\b(bevut\w*|acqua|bicchier\w*|borracc\w*|bottigliett\w*)\b/g)*2,
+  weight:fromFile?0:(/\b(peso|pesavo|peso di|bilancia|pesato)\b/.test(s)&&/\d{2,3}([.,]\d)?/.test(s)?5:0),
+  ev:fromFile?0:KW(s,/appuntament|dentista|riunione|ricordami|ricorda|\balle\s+\d|\bdomani\b|\bdopodomani\b|lunedì|martedì|mercoledì|giovedì|venerdì|sabato|domenica/g)*1.5};
+ const best=Object.keys(sc).sort((a,b)=>sc[b]-sc[a])[0];return sc[best]>0?best:(fromFile?"vis":"note")}
+/* --- interfaccia --- */
+const IBT={res:"🩺 Risultato esami",imp:"📄 Impegnativa",vis:"🩺 Referto visita",food:"🍽️ Pasto",gym:"🏋️ Allenamento",water:"💧 Acqua",weight:"⚖️ Peso",ev:"📅 Impegno in agenda",note:"📝 Nota (referto visita)"};
+let IB={files:[],text:"",type:"",data:null,rec:null};
+function ibOpen(){IB={files:[],text:"",type:"",data:null,rec:null};$("inbox").style.display="block";ibPaint();setTimeout(()=>$("ibt")&&$("ibt").focus(),50)}
+function ibClose(){try{IB.rec&&IB.rec.stop()}catch(e){}$("inbox").style.display="none";$("inbox").innerHTML=""}
+const ibSt=m=>{const o=$("ibst");if(o)o.textContent=m};
+function ibPaint(){const B=$("inbox");B.innerHTML=`<main><div class="row" style="flex-wrap:nowrap;margin-bottom:12px"><h1 style="flex:1">Casella</h1><button class="g" style="flex:0" onclick="ibClose()">Chiudi</button></div>
+ <div class="card"><p class="mut" style="margin-top:0">Scrivi, detta o allega referti, impegnative (PDF o foto). Capisco cos'è e ti propongo dove salvarlo: tu controlli e confermi.</p>
+ <textarea id="ibt" rows="4" placeholder="Es. «a pranzo 100 g di pasta e 150 g di pollo», «panca 3x8 a 70 kg», «dentista martedì alle 15», «ho bevuto mezzo litro»">${esc(IB.text)}</textarea>
+ <div class="row" style="margin-top:8px"><button class="g" id="ibmic" onclick="ibMic()">🎤 Detta</button><label class="g ibf">📎 PDF o foto<input type="file" accept="application/pdf,image/*" multiple onchange="ibFiles(this)" hidden></label></div>
+ ${IB.files.length?`<div class="mut" style="margin-top:6px">${IB.files.map(f=>"📎 "+esc(f.name)).join("<br>")}</div>`:""}
+ <button style="width:100%;margin-top:10px" onclick="ibRun()">Analizza</button><p id="ibst" class="mut" role="status" style="margin:8px 0 0"></p></div>
+ <div id="ibres">${IB.type?ibForm():""}</div><p class="mut">La lettura avviene sul tuo telefono, senza servizi di intelligenza artificiale; quello che salvi si sincronizza nel tuo spazio come il resto dei dati. Per la prima foto o il primo PDF scansionato l'app scarica il lettore (qualche MB).</p></main>`}
+function ibMic(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;if(!R){alert("La dettatura qui non è disponibile: tocca il campo di testo e usa il microfono della tastiera dell'iPhone.");$("ibt").focus();return}
+ if(IB.rec){IB.rec.stop();return}const r=new R();r.lang="it-IT";r.interimResults=true;r.continuous=true;const base=$("ibt").value?$("ibt").value+" ":"";
+ r.onresult=e=>{let t="";for(const x of e.results)t+=x[0].transcript;$("ibt").value=base+t};r.onend=()=>{IB.rec=null;const b=$("ibmic");if(b)b.textContent="🎤 Detta"};
+ r.onerror=e=>{if(e.error=="not-allowed")alert("Consenti l'uso del microfono, oppure usa il microfono della tastiera.")};r.start();IB.rec=r;$("ibmic").textContent="⏹ Stop"}
+function ibFiles(el){IB.text=$("ibt").value;const aud=[...el.files].filter(f=>f.type.startsWith("audio/"));IB.files=IB.files.concat([...el.files].filter(f=>!f.type.startsWith("audio/")));ibPaint();if(aud.length)ibSt("I file audio non posso trascriverli gratis: usa 🎤 Detta.")}
+async function ibRun(){IB.text=$("ibt").value.trim();if(!IB.text&&!IB.files.length){ibSt("Scrivi qualcosa o allega un file.");return}
+ let t=IB.text;try{for(const f of IB.files){if(f.type=="application/pdf")t+="\n"+await pdfText(f);else if(f.type.startsWith("image/"))t+="\n"+await ocr(await imgBlob(f))}}
+ catch(e){ibSt("Non riesco a leggere il file: "+(e.message||e)+". Puoi comunque scrivere a mano cosa contiene.");return}
+ IB.full=t;IB.type=classify(t,IB.files.length>0);ibBuild();ibSt("");$("ibres").innerHTML=ibForm();$("ibres").scrollIntoView({behavior:"smooth"})}
+function ibBuild(){const t=IB.full,ty=IB.type,dd=docDate(t)||day();
+ IB.data=ty=="res"?{n:/glucos|emocromo|colesterol|emoglobin|creatinin|trigliceri/i.test(t)?"Esami del sangue":"Risultato esami",d:dd,vals:labVals(t)}
+ :ty=="imp"?{n:"Impegnativa",d:dd,x:"",...impData(t)}
+ :ty=="vis"||ty=="note"?{n:((t.match(/(visita|ecografia|radiografia|risonanza|tac|elettrocardiogramma|ecg)[^\n]{0,40}/i)||[])[0]||(IB.files.length?"Referto":"Nota")).trim().replace(/^./,x=>x.toUpperCase()),d:dd,note:t.trim().slice(0,1500)}
+ :ty=="food"?{rows:foods(t)}:ty=="gym"?{rows:gymRows(t)}:ty=="water"?{ml:waterMl(t)}
+ :ty=="weight"?{kg:nv((t.match(/(\d{2,3}(?:[.,]\d)?)/)||[])[1])||""}:evParse(t)}
+function ibType(v){IB.type=v;ibBuild();$("ibres").innerHTML=ibForm()}
+const fi=(id,val,ph,w,type)=>`<input id="${id}" value="${esc(val??"")}" placeholder="${ph||""}" ${type?`type="${type}"`:""} style="${w?`flex:${w}`:""}" aria-label="${ph||id}">`;
+function ibForm(){const D=IB.data,ty=IB.type;let h="";
+ if(ty=="res")h=`${fi("ib_n",D.n,"Titolo")}<div class="row" style="margin-top:6px"><div><label>Data</label>${fi("ib_d",D.d,"","","date")}</div></div>
+  <label style="margin-top:8px">Valori trovati (${D.vals.length}) · controlla e correggi</label>${D.vals.map((o,i)=>`<div class="row ibv">${fi("v_n"+i,o.n,"Esame",3)}${fi("v_v"+i,o.v,"Valore",1)}${fi("v_u"+i,o.u,"Unità",1)}${fi("v_l"+i,o.lo,"Min",1)}${fi("v_h"+i,o.hi,"Max",1)}<button class="x" onclick="ibRead();IB.data.vals.splice(${i},1);$('ibres').innerHTML=ibForm()" aria-label="Togli">✕</button></div>`).join("")||'<p class="mut">Nessun valore riconosciuto: salvo il file e puoi aggiungerli a mano.</p>'}`;
+ else if(ty=="imp")h=`${fi("ib_n",D.n,"Titolo")}<div class="row" style="margin-top:6px"><div><label>Data</label>${fi("ib_d",D.d,"","","date")}</div><div><label>Scadenza</label>${fi("ib_x",D.x,"","","date")}</div></div>
+  <div class="row" style="margin-top:6px">${fi("ib_nre",D.nre,"NRE")}${fi("ib_pri",D.pri,"Priorità (U/B/D/P)")}</div><div class="row" style="margin-top:6px">${fi("ib_med",D.med,"Medico")}${fi("ib_ese",D.ese,"Esenzione")}</div>${fi("ib_que",D.que,"Quesito diagnostico")}
+  <label style="margin-top:8px">Prestazioni (${D.pres.length})</label>${D.pres.map((p,i)=>`<div class="row ibv">${fi("p_c"+i,p.c,"Codice",1)}${fi("p_n"+i,p.n,"Prestazione",3)}</div>`).join("")||'<p class="mut">Nessuna prestazione riconosciuta.</p>'}`;
+ else if(ty=="vis"||ty=="note")h=`${fi("ib_n",D.n,"Titolo")}<div class="row" style="margin-top:6px"><div><label>Data</label>${fi("ib_d",D.d,"","","date")}</div></div><label style="margin-top:8px">Testo</label><textarea id="ib_note" rows="5">${esc(D.note)}</textarea>`;
+ else if(ty=="food")h=`<label>Alimenti · kcal stimate per le quantità indicate</label>${D.rows.map((o,i)=>`<div class="row ibv">${fi("f_n"+i,o.n,"Alimento",3)}${fi("f_g"+i,o.g,"g",1)}${fi("f_k"+i,o.k||"","kcal",1)}</div>`).join("")||'<p class="mut">Non ho riconosciuto gli alimenti: scrivili come «100 g di pasta».</p>'}<div class="mut">Totale circa ${D.rows.reduce((s,o)=>s+o.k,0)} kcal. Gli alimenti senza kcal vanno completati.</div>`;
+ else if(ty=="gym")h=`<label>Serie di oggi</label>${D.rows.map((o,i)=>`<div class="row ibv">${fi("g_n"+i,o.n,"Esercizio",3)}${fi("g_s"+i,o.s,"Serie",1)}${fi("g_r"+i,o.r||"","Rip.",1)}${fi("g_k"+i,o.kg||"","kg",1)}</div>`).join("")}`;
+ else if(ty=="water")h=`<label>Acqua bevuta (ml)</label>${fi("ib_ml",D.ml,"ml","","number")}`;
+ else if(ty=="weight")h=`<label>Peso di oggi (kg)</label>${fi("ib_kg",D.kg,"kg","","number")}`;
+ else if(ty=="ev")h=`${fi("ib_n",D.n,"Titolo")}<div class="row" style="margin-top:6px"><div><label>Giorno</label>${fi("ib_d",D.d,"","","date")}</div><div><label>Inizio</label>${fi("ib_s",D.s,"","","time")}</div><div><label>Fine</label>${fi("ib_e",D.e,"","","time")}</div></div>`;
+ return `<div class="card"><label for="ibty">Ho capito che è</label><select id="ibty" onchange="ibType(this.value)">${Object.keys(IBT).map(k=>`<option value="${k}" ${k==ty?"selected":""}>${IBT[k]}</option>`).join("")}</select>
+ <div style="margin-top:10px">${h}</div><button style="width:100%;margin-top:12px" onclick="ibSave()">Salva</button>
+ <details style="margin-top:8px"><summary class="mut">Testo letto</summary><pre class="ibpre">${esc(IB.full||"")}</pre></details></div>`}
+function ibRead(){const D=IB.data,g=id=>$(id)?$(id).value.trim():"";if(!D)return;
+ if(D.vals)D.vals=D.vals.map((o,i)=>$("v_n"+i)?{n:g("v_n"+i),v:g("v_v"+i),u:g("v_u"+i),lo:num(g("v_l"+i)),hi:num(g("v_h"+i))}:o)}
+async function ibSave(){const ty=IB.type,D=IB.data,g=id=>$(id)?$(id).value.trim():"";let where="";
+ try{if(["res","imp","vis","note"].includes(ty)){ibRead();const files=await storeFiles(IB.files),o={t:ty=="note"?"vis":ty,n:g("ib_n")||D.n,d:g("ib_d")||day()};
+   if(ty=="res"){o.vals=D.vals.filter(z=>z.n&&z.v);}
+   if(ty=="imp"){o.x=g("ib_x");o.f={nre:g("ib_nre").replace(/\s/g,""),pri:g("ib_pri").toUpperCase().slice(0,1),med:g("ib_med"),ese:g("ib_ese"),que:g("ib_que"),pres:D.pres.map((p,i)=>({c:g("p_c"+i),n:g("p_n"+i),q:p.q})).filter(p=>p.n)}}
+   if(ty=="vis"||ty=="note")o.note=g("ib_note");storeDocs([o],files);dtab=ty=="res"?((o.vals||[]).some(vst)?"val":"res"):ty=="imp"?"imp":"res";tab="doc";where="Referti"}
+  else if(ty=="food"){D.rows.forEach((o,i)=>{const k=Math.round(num(g("f_k"+i))||0),gr=num(g("f_g"+i))||0,sc=o.k&&k?k/o.k:1;if(g("f_n"+i)&&k)S.food.push({id:uid(),d:day(),n:g("f_n"+i)+(gr?` (${gr} g)`:""),k,pr:Math.round(o.p*sc),c:Math.round(o.c*sc),f:Math.round(o.f*sc)})});tab="diet";where="Dieta"}
+  else if(ty=="gym"){D.rows.forEach((o,i)=>{const nm=g("g_n"+i);if(!nm)return;let e=S.ex.find(x=>nk(x.name)==nk(nm));if(!e){e={id:uid(),name:nm,sets:[],days:[]};S.ex.push(e)}
+    for(let k=0;k<Math.max(1,+g("g_s"+i)||1);k++)e.sets.push({id:uid(),d:day(),kg:num(g("g_k"+i))||0,r:+g("g_r"+i)||0,rest:0})});tab="gym";where="Palestra"}
+  else if(ty=="water"){addW(Math.round(num(g("ib_ml"))||0));tab="oggi";where="Oggi"}
+  else if(ty=="weight"){const kg=num(g("ib_kg"));if(!kg){alert("Scrivi il peso.");return}S.w.push({id:uid(),d:day(),kg});S.w.sort((a,b)=>a.d<b.d?-1:1);tab="prog";where="Progressi"}
+  else if(ty=="ev"){if(!g("ib_d")){alert("Scegli il giorno.");return}S.ev.push({id:uid(),d:g("ib_d"),s:g("ib_s"),e:g("ib_e")||g("ib_s"),n:g("ib_n")||"Impegno"});agSel=g("ib_d");agm=agSel.slice(0,7);agv="mese";tab="ag";where="Agenda"}
+  save();ibClose();render();window.scrollTo(0,0);toast("Salvato in "+where)}catch(e){alert("Non sono riuscito a salvare: "+(e.message||e))}}
+function toast(m){const t=$("toast");t.textContent=m;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,2500)}
+
 /* Navigazione */
 const TABS=[["oggi","💧","Oggi"],["gym","🏋️","Palestra"],["diet","🍽️","Dieta"],["ag","📅","Agenda"],["prog","📈","Progressi"],["doc","🩺","Referti"]];
 function render(){const y=window.scrollY;
- if(sb&&(!me||needPw)){$("nav").style.display="none";$("app").innerHTML=!authReady?'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>':me?vSetPw():vLogin();return}
- $("nav").style.display="";
+ if(sb&&(!me||needPw)){$("nav").style.display="none";$("fab").style.display="none";$("app").innerHTML=!authReady?'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>':me?vSetPw():vLogin();return}
+ $("nav").style.display="";$("fab").style.display="";
  const na=alertsN();$("nav").innerHTML=TABS.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')" aria-label="${t[2]}${t[0]=="doc"&&na?`, ${na} avvisi`:""}"><span>${t[1]}</span>${t[2]}${t[0]=="doc"&&na?`<i class="dot">${na}</i>`:""}</button>`).join("");
  $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc}[tab]();paintCal();window.scrollTo(0,y)}
 function go(t){tab=t;render();window.scrollTo(0,0)}

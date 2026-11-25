@@ -1,0 +1,4 @@
+# Restano solo sul PC, non vanno online
+CLAUDE.md
+.claude/
+*.bat

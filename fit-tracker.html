@@ -65,6 +65,9 @@ button:disabled{opacity:.4}
 .eq{display:flex;align-items:center;justify-content:space-between;text-align:center;margin-bottom:4px}.eq b{display:block;font-size:24px;font-weight:700;letter-spacing:-.02em}.eq span{font-size:12px;color:var(--mut)}.eq>i{font-style:normal;color:var(--mut);font-size:20px}
 .srch{flex:1;position:relative;margin:0}.srch .ti{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--mut);font-size:18px}.srch input{padding-left:38px;height:52px;border-radius:16px;background:var(--card);border:0}
 .medals{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.md{text-align:center;opacity:.4}.md.on{opacity:1}.md span{display:flex;width:52px;height:52px;margin:0 auto 4px;border-radius:50%;align-items:center;justify-content:center;background:var(--card2);font-size:24px;color:var(--mut)}.md.on span{background:var(--tr);color:#fff}.md small{display:block;font-size:11px;line-height:1.2;color:var(--mut)}
+.av{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--tr);color:#fff;font-weight:700;overflow:hidden;flex:0 0 auto}.av img{width:100%;height:100%;object-fit:cover}
+.avbtn{background:none;padding:0;margin-left:8px;flex:0 0 auto;border-radius:50%}.avwrap{position:relative;display:inline-block;cursor:pointer;margin:0}.avcam{position:absolute;right:-2px;bottom:-2px;width:32px;height:32px;border-radius:50%;background:var(--ac);color:var(--acT);display:flex;align-items:center;justify-content:center;border:3px solid var(--card)}.avcam .ti{font-size:16px}
+.lnk{background:none;border:0;padding:0;color:var(--mut);font:inherit;font-size:14px;text-decoration:underline}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:6px 11px;border-radius:14px;background:var(--card);font-size:13px;font-weight:500;white-space:nowrap}
 .rings{display:flex;justify-content:center;margin:8px 0 4px;cursor:pointer}.rg{animation:fill 1s ease both}@keyframes fill{from{stroke-dashoffset:var(--c)}}
 .legend{display:flex;justify-content:center;gap:16px;font-size:13px;color:var(--mut);margin-bottom:16px}.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:0}
@@ -230,7 +233,7 @@ function bar(val,max,col){return `<div class="bar"><i style="width:${Math.min(10
 
 /* Calcoli */
 function target(){const p=S.p,kg=lastW()||70;
- const bmr=10*kg+6.25*p.h-5*p.age+(p.sex=="m"?5:-161);
+ const bmr=10*kg+6.25*p.h-5*ageOf()+(p.sex=="m"?5:-161);
  const k=Math.round(bmr*p.act+Number(p.goal));
  const pr=Math.round(kg*1.8),f=Math.round(k*.27/9),c=Math.max(0,Math.round((k-pr*4-f*9)/4));
  return {k,pr,f,c}}
@@ -362,7 +365,7 @@ function vOggi(){const t=day(),R=rings(t),sh=dayShift(t),sl=freeSlot(t),rd=readi
  const end=sh&&sh.e=="23:59"?((evOn(addD(t,1)).find(x=>x.sleep)||{}).e||""):sh&&sh.e,shTxt=sh?`${esc(sh.n)}${sh.s?" "+sh.s+(end?"–"+end:""):""}`:"";
  const next=R.X.find(e=>!e.sets.some(s=>s.d==t)),allDone=R.X.length&&R.done==R.X.length;
  return `<div class="row" style="flex-wrap:nowrap;align-items:flex-end;margin-bottom:6px"><div style="flex:1"><div class="kick" style="text-transform:capitalize">${new Date().toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}</div><h1>Oggi</h1></div>
- ${sh?`<span class="chip">${sh.s?"Turno "+shTxt.replace(esc(sh.n)+" ",""):shTxt}</span>`:""}</div>
+ ${sh?`<span class="chip">${sh.s?"Turno "+shTxt.replace(esc(sh.n)+" ",""):shTxt}</span>`:""}<button class="avbtn" onclick="go('prof')" aria-label="Il tuo profilo">${avatar(40)}</button></div>
  <div class="rings" onclick="go('prog')">${ringSvg(R)}</div>
  <div class="legend"><span><i style="background:var(--tr)"></i>Allenamento</span><span><i style="background:var(--kc)"></i>Dieta</span><span><i style="background:var(--wat)"></i>Acqua</span></div>
  ${allDone?`<div class="cta done"><div><small>Allenamento di oggi</small><b>Completato</b></div><span><i class="ti ti-check"></i></span></div>`
@@ -544,11 +547,8 @@ function vProg(){const p=S.p,W=S.w.slice().reverse(),first=S.w[0],l=S.w[S.w.leng
  <div class="card"><h2>Foto e storico</h2>${W.filter(x=>x.img||x.ph).map(x=>{const p=x.ph||{f:x.img};return `<div style="margin-bottom:12px"><div class="mut">${fd(x.d)} · ${x.kg} kg · frontale, laterale, retro</div><div class="grid">${["f","l","b"].map(k=>p[k]?`<img src="${p[k]}" alt="Foto del ${fd(x.d)}">`:"<div></div>").join("")}</div></div>`}).join("")}
  ${W.map(x=>`<div class="item"><span>${fd(x.d)} · <b>${x.kg} kg</b></span><button class="x" onclick="delW('${x.id}')">Elimina</button></div>`).join("")||'<p class="mut">Nessuna pesata.</p>'}</div>
  <div class="card"><h2>Misure (cm)</h2><div class="row">${MS.map(m=>`<div><label>${m[1]}</label><input id="m_${m[0]}" type="number" step="0.1" inputmode="decimal"></div>`).join("")}</div><button style="width:100%;margin-top:8px" onclick="addM()">Salva misure</button>${measList()}</div>
- <div class="card"><h2>I tuoi dati</h2><div class="row"><div><label>Sesso</label><select id="ps"><option value="m" ${p.sex=="m"?"selected":""}>Uomo</option><option value="f" ${p.sex=="f"?"selected":""}>Donna</option></select></div><div><label>Età</label><input id="pa" type="number" value="${p.age}"></div><div><label>Altezza (cm)</label><input id="ph" type="number" value="${p.h}"></div></div>
- <div class="row" style="margin-top:8px"><div><label>Attività</label><select id="pc">${[[1.2,"Sedentario"],[1.375,"Leggera (1-3 allenamenti)"],[1.45,"Media (3-5 allenamenti)"],[1.65,"Alta (6-7 allenamenti)"]].map(a=>`<option value="${a[0]}" ${p.act==a[0]?"selected":""}>${a[1]}</option>`).join("")}</select></div>
- <div><label>Obiettivo</label><select id="pg"><option value="-400" ${p.goal==-400?"selected":""}>Dimagrire</option><option value="0" ${p.goal==0?"selected":""}>Mantenere</option><option value="300" ${p.goal==300?"selected":""}>Aumentare massa</option></select></div></div>
- <button style="width:100%;margin-top:8px" onclick="saveP()">Salva dati</button></div>${accCard()}${secCard()}`}
-function saveP(){S.p={sex:v("ps"),age:n("pa")||30,h:n("ph")||175,act:parseFloat(v("pc")),goal:parseInt(v("pg"))};save();render()}
+ <button class="cta" onclick="go('prof')" style="margin-top:4px"><div><small>Dati, obiettivi, account e impostazioni</small><b>Il tuo profilo</b></div><span style="background:var(--card2);color:var(--ink)"><i class="ti ti-user"></i></span></button>`}
+function saveP(){S.p={...S.p,sex:v("ps"),age:n("pa")||S.p.age||30,h:n("ph")||175,act:parseFloat(v("pc")),goal:parseInt(v("pg"))};save();render()}
 function delW(id){S.w=S.w.filter(x=>x.id!=id);save();render()}
 function addWeight(){const kg=n("wk");if(!kg)return;const f=$("wf").files[0];
  const done=img=>{S.w.push({id:uid(),d:day(),kg,img});S.w.sort((a,b)=>a.d<b.d?-1:1);save();render()};
@@ -904,7 +904,7 @@ const mmss=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.flo
 function woBeep(){try{navigator.vibrate&&navigator.vibrate([200,100,200]);const a=woAC||(woAC=new (window.AudioContext||window.webkitAudioContext)());[0,.25].forEach(t=>{const o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.value=.15;o.connect(g);g.connect(a.destination);o.start(a.currentTime+t);o.stop(a.currentTime+t+.15)})}catch(e){}}
 function woPaint(){const e=woEx(),t=day();if(!e){woEnd();return}const td=e.sets.filter(s=>s.d==t),nx=nextLoad(e),last=e.sets[e.sets.length-1]||{};
  if(WO.kg==null){WO.kg=td.length?+td[td.length-1].kg:nx?nx.kg:(+last.kg||0);WO.r=td.length?+td[td.length-1].r:nx?nx.r:(+last.r||10)}
- const rest=e.rest||last.rest||90;
+ const rest=e.rest||last.rest||S.p.rest||90;
  $("wo").innerHTML=`<main><div class="row" style="flex-wrap:nowrap;margin-bottom:12px"><div style="flex:1"><div class="kick">Allenamento in corso</div><b id="woel" style="font-size:28px;font-variant-numeric:tabular-nums">${mmss((Date.now()-WO.start)/1000)}</b></div><button style="flex:0 0 auto" onclick="woEnd()">Fine</button></div>
  <div class="wochips">${WO.ids.map((id,i)=>{const x=S.ex.find(z=>z.id==id);if(!x)return"";const n=x.sets.filter(s=>s.d==t).length;return `<button class="${i==WO.i?"":"g"}" onclick="WO.i=${i};WO.kg=null;woSave();woPaint()">${n?'<i class="ti ti-check"></i>':""}${esc(x.name)}${n?` · ${n}`:""}</button>`}).join("")}</div>
  <div class="card"><h2 style="font-size:24px;margin-bottom:4px">${esc(e.name)}</h2>${nx&&!td.length?`<div class="mut">Consigliato: ${nx.kg?fmtKg(nx.kg)+" kg × ":""}${nx.r} · ${nx.why}</div>`:td.length?`<div class="mut">Serie fatte oggi: ${td.length}</div>`:""}
@@ -994,13 +994,44 @@ async function monthShare(ym,tit){const m=monthStats(ym),c=document.createElemen
  const blob=await new Promise(r=>c.toBlob(r,"image/png")),file=new File([blob],`fit-tracker-${ym}.png`,{type:"image/png"});
  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:"Il mio mese"})}catch(e){}}
  else{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}}
+/* ===== Profilo: foto, nome, dati personali, obiettivi, preferenze, account e impostazioni.
+   Tutto in S.p (name, photo come immagine piccola, birth, h, sex, act, goal, gw = peso obiettivo, rest = recupero predefinito) e S.bar. ===== */
+function ageOf(){const b=S.p.birth;if(!b)return S.p.age||30;const t=new Date(),d=new Date(b+"T12:00");let a=t.getFullYear()-d.getFullYear();if(t.getMonth()<d.getMonth()||(t.getMonth()==d.getMonth()&&t.getDate()<d.getDate()))a--;return a}
+const initials=()=>(S.p.name||(me&&me.email)||"Tu").split(/[\s@._]+/).filter(Boolean).slice(0,2).map(x=>x[0].toUpperCase()).join("");
+const avatar=(px)=>`<span class="av" style="width:${px}px;height:${px}px;font-size:${Math.round(px*.38)}px">${S.p.photo?`<img src="${S.p.photo}" alt="">`:initials()}</span>`;
+function vProf(){const p=S.p,kg=lastW(),tg=target(),bmi=kg&&p.h?kg/Math.pow(p.h/100,2):0,first=[S.w[0]&&S.w[0].d,...S.ex.flatMap(e=>e.sets.map(s=>s.d)),...S.food.map(f=>f.d)].filter(Boolean).sort()[0];
+ const bmiLab=bmi<18.5?"sottopeso":bmi<25?"normopeso":bmi<30?"sovrappeso":"obesità",gd2=p.gw&&kg?kg-p.gw:null;
+ return `<button class="mini" onclick="go('oggi')" style="margin-bottom:10px"><i class="ti ti-chevron-left" style="margin:0 2px 0 0"></i>Indietro</button>
+ <div class="card" style="text-align:center;padding-top:22px">
+ <label class="avwrap" aria-label="Cambia foto">${avatar(96)}<span class="avcam"><i class="ti ti-camera"></i></span><input type="file" accept="image/*" hidden onchange="profPhoto(this)"></label>
+ <h1 style="margin-top:10px">${esc(p.name||"Il tuo profilo")}</h1><div class="mut">${me?esc(me.email):""}${first?` · con Fit Tracker dal ${new Date(first+"T12:00").toLocaleDateString("it-IT",{month:"long",year:"numeric"})}`:""}</div>
+ <div class="wk" style="grid-template-columns:repeat(3,1fr);margin-top:16px"><div><b style="color:var(--tr)">${gymDays().length}</b><span>allenamenti</span></div><div><b>${Object.keys(S.medals||{}).length}</b><span>traguardi</span></div><div><b style="color:var(--tr)">${streak()}</b><span>giorni di fila</span></div></div>
+ ${p.photo?`<button class="lnk" style="margin-top:10px" onclick="S.p.photo=null;save();render()">Togli la foto</button>`:""}</div>
+ <div class="card"><h2>I tuoi dati</h2>
+ <label for="pn2">Nome</label><input id="pn2" value="${esc(p.name||"")}" placeholder="Come ti chiami" autocomplete="given-name">
+ <div class="row" style="margin-top:8px"><div><label for="ps">Sesso</label><select id="ps"><option value="m" ${p.sex=="m"?"selected":""}>Uomo</option><option value="f" ${p.sex=="f"?"selected":""}>Donna</option></select></div><div><label for="pb">Data di nascita</label><input id="pb" type="date" value="${p.birth||""}"></div></div>
+ <div class="row" style="margin-top:8px"><div><label for="ph">Altezza (cm)</label><input id="ph" type="number" inputmode="numeric" value="${p.h||""}"></div><div><label for="pgw">Peso obiettivo (kg)</label><input id="pgw" type="number" step="0.1" inputmode="decimal" value="${p.gw||""}"></div></div>
+ <label for="pc" style="margin-top:8px">Attività</label><select id="pc">${[[1.2,"Sedentario"],[1.375,"Leggera (1-3 allenamenti a settimana)"],[1.45,"Media (3-5 allenamenti)"],[1.65,"Alta (6-7 allenamenti)"]].map(a=>`<option value="${a[0]}" ${p.act==a[0]?"selected":""}>${a[1]}</option>`).join("")}</select>
+ <label style="margin-top:8px">Obiettivo</label><div class="seg">${[[-400,"Dimagrire","trending-down"],[0,"Mantenere","equal"],[300,"Massa","trending-up"]].map(g=>`<button type="button" class="${p.goal==g[0]?"":"g"}" onclick="profGoal(${g[0]})"><i class="ti ti-${g[2]}"></i>${g[1]}</button>`).join("")}</div>
+ <button style="width:100%;margin-top:12px" onclick="profSave()">Salva</button></div>
+ <div class="card lines"><div class="ln"><span>Età</span><b>${ageOf()} anni</b></div>
+ <div class="ln"><span>Peso attuale</span><b>${kg?fmtKg(kg)+" kg":"–"}</b></div>
+ ${bmi?`<div class="ln"><span>BMI</span><b>${fmtKg(bmi)} <small class="mut" style="font-weight:400">${bmiLab}</small></b></div>`:""}
+ ${gd2!=null?`<div class="ln"><span>All'obiettivo</span><b style="color:var(--tr)">${Math.abs(gd2)<.1?"Raggiunto":(gd2>0?"−":"+")+fmtKg(Math.abs(gd2))+" kg"}</b></div>`:""}
+ <div class="ln"><span>Calorie al giorno</span><b style="color:var(--kc)">${it(tg.k)} kcal</b></div><div class="ln"><span>Proteine</span><b>${tg.pr} g</b></div><div class="ln"><span>Acqua</span><b style="color:var(--wat)">${L1(waterTarget())} L</b></div></div>
+ <div class="card"><h2>Allenamento</h2><div class="row"><div><label for="pbar">Bilanciere (kg)</label><select id="pbar" onchange="S.bar=+this.value;save()">${[20,15,10].map(x=>`<option ${(S.bar||20)==x?"selected":""}>${x}</option>`).join("")}</select></div><div><label for="prest">Recupero predefinito</label><select id="prest" onchange="S.p.rest=+this.value;save()">${[60,90,120,180].map(x=>`<option value="${x}" ${(p.rest||90)==x?"selected":""}>${x} s</option>`).join("")}</select></div></div></div>
+ ${accCard()}${secCard()}`}
+function profGoal(g){S.p.goal=g;save();render()}
+function profSave(){S.p={...S.p,name:v("pn2"),sex:v("ps"),birth:v("pb")||S.p.birth||"",h:n("ph")||S.p.h||175,gw:n("pgw")||null,act:parseFloat(v("pc"))||S.p.act};if(S.p.birth)S.p.age=ageOf();save();render();toast("Profilo salvato")}
+async function profPhoto(el){const f=el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement("canvas"),s=Math.min(im.width,im.height);c.width=c.height=240;
+ c.getContext("2d").drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,240,240);S.p.photo=c.toDataURL("image/jpeg",.8);save();render()};im.src=r.result};r.readAsDataURL(f)}
 /* Navigazione */
 const TABS=[["oggi","home","Oggi"],["gym","barbell","Palestra"],["diet","salad","Dieta"],["ag","calendar-event","Agenda"],["prog","chart-line","Progressi"],["doc","stethoscope","Referti"]];
 function render(){const y=window.scrollY;
  if(sb&&(!me||needPw)){$("nav").style.display="none";$("fab").style.display="none";$("app").innerHTML=!authReady?'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>':me?vSetPw():vLogin();return}
  $("nav").style.display="";$("fab").style.display="";
  const na=alertsN();$("nav").innerHTML=TABS.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')" aria-label="${t[2]}${t[0]=="doc"&&na?`, ${na} avvisi`:""}"><span><i class="ti ti-${t[1]}" aria-hidden="true"></i></span>${t[2]}${t[0]=="doc"&&na?`<i class="dot">${na}</i>`:""}</button>`).join("");
- $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc}[tab]();paintCal();window.scrollTo(0,y);if(!sb||me)medalCheck()}
+ $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc,prof:vProf}[tab]();paintCal();window.scrollTo(0,y);if(!sb||me)medalCheck()}
 function go(t){tab=t;render();window.scrollTo(0,0)}
 healthIn();try{WO=JSON.parse(localStorage.getItem(KWO));if(WO&&WO.d!=day())WO=null}catch(e){WO=null}
 startSync();render();paintTheme();lockShow();

@@ -1007,24 +1007,31 @@ function vProf(){const p=S.p,kg=lastW(),tg=target(),bmi=kg&&p.h?kg/Math.pow(p.h/
  <h1 style="margin-top:10px">${esc(p.name||"Il tuo profilo")}</h1><div class="mut">${me?esc(me.email):""}${first?` · con Fit Tracker dal ${new Date(first+"T12:00").toLocaleDateString("it-IT",{month:"long",year:"numeric"})}`:""}</div>
  <div class="wk" style="grid-template-columns:repeat(3,1fr);margin-top:16px"><div><b style="color:var(--tr)">${gymDays().length}</b><span>allenamenti</span></div><div><b>${Object.keys(S.medals||{}).length}</b><span>traguardi</span></div><div><b style="color:var(--tr)">${streak()}</b><span>giorni di fila</span></div></div>
  ${p.photo?`<button class="lnk" style="margin-top:10px" onclick="S.p.photo=null;save();render()">Togli la foto</button>`:""}</div>
- <div class="card"><h2>I tuoi dati</h2>
+ <div class="card" oninput="profDirty=1" onchange="profDirty=1"><h2>I tuoi dati</h2>
  <label for="pn2">Nome</label><input id="pn2" value="${esc(p.name||"")}" placeholder="Come ti chiami" autocomplete="given-name">
  <div class="row" style="margin-top:8px"><div><label for="ps">Sesso</label><select id="ps"><option value="m" ${p.sex=="m"?"selected":""}>Uomo</option><option value="f" ${p.sex=="f"?"selected":""}>Donna</option></select></div><div><label for="pb">Data di nascita</label><input id="pb" type="date" value="${p.birth||""}"></div></div>
- <div class="row" style="margin-top:8px"><div><label for="ph">Altezza (cm)</label><input id="ph" type="number" inputmode="numeric" value="${p.h||""}"></div><div><label for="pgw">Peso obiettivo (kg)</label><input id="pgw" type="number" step="0.1" inputmode="decimal" value="${p.gw||""}"></div></div>
+ <div class="row" style="margin-top:8px"><div><label for="ph">Altezza (cm)</label><input id="ph" type="number" inputmode="numeric" value="${p.h||""}" placeholder="175"></div><div><label for="pw2">Peso attuale (kg)</label><input id="pw2" type="number" step="0.1" inputmode="decimal" value="${kg||""}" placeholder="–"></div></div>
+ <div class="row" style="margin-top:8px"><div><label for="pgw">Peso obiettivo (kg)</label><input id="pgw" type="number" step="0.1" inputmode="decimal" value="${p.gw||""}" placeholder="–"></div><div></div></div>
  <label for="pc" style="margin-top:8px">Attività</label><select id="pc">${[[1.2,"Sedentario"],[1.375,"Leggera (1-3 allenamenti a settimana)"],[1.45,"Media (3-5 allenamenti)"],[1.65,"Alta (6-7 allenamenti)"]].map(a=>`<option value="${a[0]}" ${p.act==a[0]?"selected":""}>${a[1]}</option>`).join("")}</select>
  <label style="margin-top:8px">Obiettivo</label><div class="seg">${[[-400,"Dimagrire","trending-down"],[0,"Mantenere","equal"],[300,"Massa","trending-up"]].map(g=>`<button type="button" class="${p.goal==g[0]?"":"g"}" onclick="profGoal(${g[0]})"><i class="ti ti-${g[2]}"></i>${g[1]}</button>`).join("")}</div>
  <button style="width:100%;margin-top:12px" onclick="profSave()">Salva</button></div>
- <div class="card lines"><div class="ln"><span>Età</span><b>${ageOf()} anni</b></div>
+ ${!p.birth||!kg||!p.h?`<div class="alert" style="margin:-4px 0 12px">Per calcoli giusti mancano: ${[!p.birth&&"data di nascita",!p.h&&"altezza",!kg&&"peso attuale"].filter(Boolean).join(", ")}. Finché mancano uso ${[!p.birth&&"30 anni",!p.h&&"175 cm",!kg&&"70 kg"].filter(Boolean).join(", ")}.</div>`:""}
+ <div class="card lines"><div class="ln"><span>Età</span><b>${p.birth?ageOf()+" anni":"–"}</b></div>
  <div class="ln"><span>Peso attuale</span><b>${kg?fmtKg(kg)+" kg":"–"}</b></div>
  ${bmi?`<div class="ln"><span>BMI</span><b>${fmtKg(bmi)} <small class="mut" style="font-weight:400">${bmiLab}</small></b></div>`:""}
  ${gd2!=null?`<div class="ln"><span>All'obiettivo</span><b style="color:var(--tr)">${Math.abs(gd2)<.1?"Raggiunto":(gd2>0?"−":"+")+fmtKg(Math.abs(gd2))+" kg"}</b></div>`:""}
  <div class="ln"><span>Calorie al giorno</span><b style="color:var(--kc)">${it(tg.k)} kcal</b></div><div class="ln"><span>Proteine</span><b>${tg.pr} g</b></div><div class="ln"><span>Acqua</span><b style="color:var(--wat)">${L1(waterTarget())} L</b></div></div>
  <div class="card"><h2>Allenamento</h2><div class="row"><div><label for="pbar">Bilanciere (kg)</label><select id="pbar" onchange="S.bar=+this.value;save()">${[20,15,10].map(x=>`<option ${(S.bar||20)==x?"selected":""}>${x}</option>`).join("")}</select></div><div><label for="prest">Recupero predefinito</label><select id="prest" onchange="S.p.rest=+this.value;save()">${[60,90,120,180].map(x=>`<option value="${x}" ${(p.rest||90)==x?"selected":""}>${x} s</option>`).join("")}</select></div></div></div>
  ${accCard()}${secCard()}`}
-/* Legge i campi del profilo in S.p prima di ogni ridisegno, così niente di quello che hai scritto va perso */
-function profRead(){if(!$("pn2"))return;S.p={...S.p,name:v("pn2"),sex:v("ps"),birth:v("pb")||S.p.birth||"",h:n("ph")||S.p.h||175,gw:n("pgw")||null,act:parseFloat(v("pc"))||S.p.act};if(S.p.birth)S.p.age=ageOf()}
+/* Legge i campi del profilo e li salva, ma SOLO se li hai modificati su questo dispositivo (profDirty):
+   così una pagina Profilo rimasta aperta altrove non sovrascrive con valori vecchi i dati arrivati dalla sincronizzazione */
+let profDirty=0;
+function profRead(){if(!profDirty||!$("pn2"))return;profDirty=0;
+ S.p={...S.p,name:v("pn2"),sex:v("ps"),birth:v("pb")||S.p.birth||"",h:n("ph")||S.p.h||175,gw:n("pgw")||null,act:parseFloat(v("pc"))||S.p.act};if(S.p.birth)S.p.age=ageOf();
+ const w=Math.round(n("pw2")*10)/10;if(w>20&&w<400&&w!=lastW()){const t=day(),x=S.w.find(z=>z.d==t);if(x)x.kg=w;else{S.w.push({id:uid(),d:t,kg:w});S.w.sort((a,b)=>a.d<b.d?-1:1)}}
+ save()}
 function profGoal(g){profRead();S.p.goal=g;save();render()}
-function profSave(){profRead();save();render();toast("Profilo salvato")}
+function profSave(){profDirty=1;profRead();render();toast("Profilo salvato")}
 async function profPhoto(el){const f=el.files[0];if(!f)return;profRead();const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement("canvas"),s=Math.min(im.width,im.height);c.width=c.height=240;
  c.getContext("2d").drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,240,240);S.p.photo=c.toDataURL("image/jpeg",.8);save();render()};im.src=r.result};r.readAsDataURL(f)}
 /* Navigazione */
@@ -1034,7 +1041,7 @@ function render(){const y=window.scrollY;
  $("nav").style.display="";$("fab").style.display="";
  const na=alertsN();$("nav").innerHTML=TABS.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')" aria-label="${t[2]}${t[0]=="doc"&&na?`, ${na} avvisi`:""}"><span><i class="ti ti-${t[1]}" aria-hidden="true"></i></span>${t[2]}${t[0]=="doc"&&na?`<i class="dot">${na}</i>`:""}</button>`).join("");
  if(tab=="prof")profRead();$("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc,prof:vProf}[tab]();paintCal();window.scrollTo(0,y);if(!sb||me)medalCheck()}
-function go(t){if(tab=="prof"&&t!="prof"){profRead();save()}tab=t;render();window.scrollTo(0,0)}
+function go(t){if(tab=="prof"&&t!="prof")profRead();tab=t;render();window.scrollTo(0,0)}
 healthIn();try{WO=JSON.parse(localStorage.getItem(KWO));if(WO&&WO.d!=day())WO=null}catch(e){WO=null}
 startSync();render();paintTheme();lockShow();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){render();syncNow()}});

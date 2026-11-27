@@ -65,8 +65,6 @@ button:disabled{opacity:.4}
 .eq{display:flex;align-items:center;justify-content:space-between;text-align:center;margin-bottom:4px}.eq b{display:block;font-size:24px;font-weight:700;letter-spacing:-.02em}.eq span{font-size:12px;color:var(--mut)}.eq>i{font-style:normal;color:var(--mut);font-size:20px}
 .srch{flex:1;position:relative;margin:0}.srch .ti{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--mut);font-size:18px}.srch input{padding-left:38px;height:52px;border-radius:16px;background:var(--card);border:0}
 .medals{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.md{text-align:center;opacity:.4}.md.on{opacity:1}.md span{display:flex;width:52px;height:52px;margin:0 auto 4px;border-radius:50%;align-items:center;justify-content:center;background:var(--card2);font-size:24px;color:var(--mut)}.md.on span{background:var(--tr);color:#fff}.md small{display:block;font-size:11px;line-height:1.2;color:var(--mut)}
-.mic{flex:0 0 36px;height:36px;border-radius:50%;background:var(--card2);display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:18px}.lnk{background:none;border:0;padding:0;color:var(--mut);font:inherit;font-size:13px;text-decoration:underline dotted}
-nav button{font-size:10px}nav span{font-size:21px}
 .chip{display:inline-flex;align-items:center;gap:4px;padding:6px 11px;border-radius:14px;background:var(--card);font-size:13px;font-weight:500;white-space:nowrap}
 .rings{display:flex;justify-content:center;margin:8px 0 4px;cursor:pointer}.rg{animation:fill 1s ease both}@keyframes fill{from{stroke-dashoffset:var(--c)}}
 .legend{display:flex;justify-content:center;gap:16px;font-size:13px;color:var(--mut);margin-bottom:16px}.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:0}
@@ -139,7 +137,7 @@ summary{cursor:pointer}
 const K="fit-tracker-v1";let S=null;
 try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
 function norm(x){x=x||{p:{sex:"m",age:30,h:175,act:1.45,goal:0},w:[],ex:[],food:[],water:{},steps:{},runs:[]};
- ["w","ex","food","runs","meas","ev","docs"].forEach(k=>x[k]=x[k]||[]);x.water=x.water||{};x.steps=x.steps||{};x.prod=x.prod||{};x.burn=x.burn||{};x.sleep=x.sleep||{};x.medals=x.medals||{};x.wo=x.wo||[];["money","orders","mail","mailChk","mailSkip"].forEach(k=>x[k]=x[k]||[]);return x}
+ ["w","ex","food","runs","meas","ev","docs"].forEach(k=>x[k]=x[k]||[]);x.water=x.water||{};x.steps=x.steps||{};x.prod=x.prod||{};x.burn=x.burn||{};x.sleep=x.sleep||{};x.medals=x.medals||{};x.wo=x.wo||[];return x}
 S=norm(S);let dtab="imp";let gd=(new Date().getDay()+6)%7;
 let tab="oggi",tI=null;
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert("Memoria piena: elimina qualche foto.")}syncSoon()};
@@ -996,114 +994,13 @@ async function monthShare(ym,tit){const m=monthStats(ym),c=document.createElemen
  const blob=await new Promise(r=>c.toBlob(r,"image/png")),file=new File([blob],`fit-tracker-${ym}.png`,{type:"image/png"});
  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:"Il mio mese"})}catch(e){}}
  else{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}}
-/* ===== Spese e ordini dalle email. S.mail = messaggi arrivati dallo script Google (oggetto + inizio testo), trasformati qui in
-   S.money [{id,d,amt(± euro),desc,cat,src}] e S.orders [{id,d,shop,num,item,amt,st,eta}]; i non riconosciuti vanno in "Da controllare".
-   Dopo l'elaborazione il testo dell'email si cancella: restano solo i campi estratti. ===== */
-const eur=x=>new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",useGrouping:"always"}).format(x||0),eur0=x=>new Intl.NumberFormat("it-IT",{style:"currency",currency:"EUR",maximumFractionDigits:0,useGrouping:"always"}).format(Math.round(x||0));
-const CATS=[["spesa","Supermercato","shopping-cart",/esselunga|coop|conad|carrefour|lidl|eurospin|pam\b|penny|aldi|md\s|despar|iper|tigros|famila|bennet|crai|naturasi/i],
- ["cibo","Bar e ristoranti","tools-kitchen-2",/bar\b|ristorant|pizzer|trattori|mcdonald|burger|kfc|starbucks|autogrill|sushi|deliveroo|glovo|just ?eat|uber ?eats|caff[eè]/i],
- ["auto","Carburante e auto","gas-station",/\beni\b|enilive|q8|\bip\b|tamoil|esso|shell|api\b|carburant|benzin|telepass|autostrad|parchegg/i],
- ["salute","Salute e farmacia","first-aid-kit",/farmaci|parafarmac|ticket|\bcup\b|asl|ospedal|laborator|medic|dentist|ottic/i],
- ["sport","Sport e palestra","barbell",/palestr|decathlon|fitness|gym|myprotein|prozis|integrator|sport/i],
- ["casa","Casa e bollette","home",/enel|a2a|hera|iren|edison|acea|gas\b|luce|bollett|condomin|affitto|ikea|leroy|brico/i],
- ["trasporti","Trasporti","train",/trenitalia|italo|atm\b|atac|uber|taxi|free ?now|ryanair|easyjet|ita airways|flixbus|biglietto/i],
- ["abbon","Abbonamenti","device-tv",/netflix|spotify|disney|prime video|amazon prime|apple\.com|icloud|google (one|play)|youtube|dazn|now tv|tim\b|vodafone|wind|iliad|fastweb|ho\. mobile/i],
- ["online","Acquisti online","package",/amazon|zalando|ebay|shein|temu|aliexpress|vinted|paypal/i],
- ["contanti","Prelievi","cash",/prelievo|atm\s|bancomat/i],["entrate","Entrate","arrow-down-left",/stipendio|accredito|bonifico (in entrata|ricevuto)|rimborso|hai ricevuto/i],
- ["altro","Altro","dots",/.^/]];
-const catOf=(t,amt)=>amt>0?"entrate":(CATS.find(c=>c[3].test(t))||CATS[CATS.length-1])[0];
-const euroIn=t=>{const m=t.match(/(?:€|eur(?:o)?)\s*([-+]?\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})|([-+]?\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})\s*(?:€|eur(?:o)?\b)/i);if(!m)return null;let s=m[1]||m[2];s=/,\d{2}$/.test(s)?s.replace(/\./g,"").replace(",","."):s;return parseFloat(s)};
-function parseMail(x){const t=x.subj+"\n"+x.text,low=t.toLowerCase(),from=x.from.replace(/<.*>/,"").replace(/"/g,"").trim();
- if(/ordin|order|spedi|consegn|tracking|pacco|corriere|in arrivo/.test(low)&&!/bonifico|addebito sul conto/.test(low)){
-  const num=((t.match(/\b(\d{3}-\d{7}-\d{7})\b/)||t.match(/ordine\s*(?:n\.?|nr\.?|numero|#)\s*[:#]?\s*([\w-]*\d[\w-]{3,})/i)||t.match(/order\s*#?\s*([\w-]*\d[\w-]{3,})/i)||[])[1]||"");
-  const st=/consegnat|delivered/.test(low)?"consegnato":/spedit|in transito|in consegna|shipped|out for delivery|in arrivo/.test(low)?"spedito":/annullat|rimborsat/.test(low)?"annullato":"ordinato";
-  const eta=((t.match(/(?:consegna prevista|arriver[aà]|data di consegna|consegna stimata)[^\n:]*[:\s]+([^\n]{3,40})/i)||[])[1]||"").trim();
-  const item=((x.subj.match(/["“«](.{3,60})["”»]/)||[])[1]||"").trim();
-  return {kind:"order",o:{id:x.id,d:x.d,shop:from.slice(0,40)||"Negozio",num,item,amt:euroIn(t)||0,st,eta}}}
- const amt=euroIn(t);if(amt==null)return null;
- const plus=/accredit|stipendio|in entrata|rimborso|hai ricevuto|ti ha inviato|ricevuto un (bonifico|pagamento)/.test(low)&&!/addebit|pagamento effettuato|pagamento di|hai pagato|hai speso|hai inviato|ricevuta del pagamento/.test(low);
- const end="(?:\\s+(?:il|in data|per|con|di|sul|tramite)\\b|[\\n,;.]|$)",mt=re=>(t.match(new RegExp(re+"\\s*[:]?\\s+([A-Za-z0-9][^\\n,;]{2,40}?)"+end,"i"))||[])[1];
- const merch=(mt("(?:hai pagato|hai speso|pagamento di)\\s+[\\d.,]+\\s*(?:€|eur\\w*)?\\s+(?:a|presso|da)")||mt("(?:presso|esercente|a favore di|beneficiario)")||mt("\\bda")||x.subj).trim().slice(0,50);
- const sign=plus?1:-1;return {kind:"money",o:{id:x.id,d:x.d,amt:sign*Math.abs(amt),desc:merch,cat:catOf(merch+" "+t,sign),src:from.slice(0,40)}}}
-function mailProcess(){const M=S.mail||[];if(!M.length)return 0;S.money=S.money||[];S.orders=S.orders||[];S.mailChk=S.mailChk||[];S.mailSkip=S.mailSkip||[];let n=0;
- M.forEach(x=>{const r=parseMail(x);n++;if(!r){S.mailChk.push({id:x.id,d:x.d,from:x.from.replace(/<.*>/,"").trim().slice(0,40),subj:x.subj.slice(0,120)});return}
-  if(r.kind=="money")S.money.push(r.o);else{const o=r.o,same=o.num&&S.orders.find(z=>z.num==o.num);if(same){if(["consegnato","annullato"].includes(o.st)||same.st=="ordinato")same.st=o.st;same.eta=o.eta||same.eta;same.amt=same.amt||o.amt;same.item=same.item||o.item;S.mailSkip.push(o.id)}else S.orders.push(o)}});
- S.mail=[];return n}
-let spM=0,spEdit=null;
-function vSpese(){const x=new Date();x.setDate(1);x.setMonth(x.getMonth()+spM);const ym=x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0"),tit=x.toLocaleDateString("it-IT",{month:"long",year:"numeric"});
- const L=(S.money||[]).filter(m=>m.d.startsWith(ym)).sort((a,b)=>a.d<b.d?1:-1),out=L.filter(m=>m.amt<0).reduce((a,m)=>a-m.amt,0),inn=L.filter(m=>m.amt>0).reduce((a,m)=>a+m.amt,0);
- const byC={};L.filter(m=>m.amt<0).forEach(m=>byC[m.cat]=(byC[m.cat]||0)-m.amt);const C=Object.keys(byC).sort((a,b)=>byC[b]-byC[a]),mx=C.length?byC[C[0]]:1,cat=k=>CATS.find(c=>c[0]==k)||CATS[CATS.length-1];
- const O=(S.orders||[]).filter(o=>o.st!="consegnato"&&o.st!="annullato").sort((a,b)=>a.d<b.d?1:-1),chk=S.mailChk||[],days=[...new Set(L.map(m=>m.d))];
- return `<h1>Spese</h1><p class="sub">Movimenti e ordini letti dalle tue email.</p>
- <div class="row" style="flex-wrap:nowrap;justify-content:center;margin-bottom:12px"><button class="mini" style="flex:0 0 40px" onclick="spM--;render()" aria-label="Mese precedente"><i class="ti ti-chevron-left" style="margin:0"></i></button><b style="flex:1;text-align:center;text-transform:capitalize">${tit}</b><button class="mini" style="flex:0 0 40px" ${spM>=0?"disabled":""} onclick="spM++;render()" aria-label="Mese successivo"><i class="ti ti-chevron-right" style="margin:0"></i></button></div>
- <div class="card"><div class="kick">Uscite del mese</div><div class="big" style="margin:2px 0 8px">${eur(out)}</div>
- <div class="row" style="flex-wrap:nowrap"><div><span class="mut">Entrate</span><br><b style="color:var(--kc)">${eur0(inn)}</b></div><div><span class="mut">Saldo</span><br><b>${eur0(inn-out)}</b></div></div>
- ${C.map(k=>`<div style="margin-top:10px"><div class="row" style="justify-content:space-between;flex-wrap:nowrap"><span><i class="ti ti-${cat(k)[2]}" style="color:var(--mut);margin-right:6px"></i>${cat(k)[1]}</span><span style="flex:0 0 auto;font-weight:600">${eur(byC[k])}</span></div>${bar(byC[k],mx,"var(--tr)")}</div>`).join("")||'<p class="mut" style="margin:8px 0 0">Nessuna spesa in questo mese.</p>'}</div>
- ${O.length?`<div class="card"><h2>Ordini in arrivo</h2>${O.map(o=>`<div class="item"><div style="min-width:0"><b>${esc(o.shop)}</b>${o.item?` · ${esc(o.item)}`:""}<div class="mut">${o.st=="spedito"?'<i class="ti ti-truck-delivery" style="color:var(--wat)"></i> Spedito':'<i class="ti ti-package"></i> Ordinato'}${o.eta?" · arriva "+esc(o.eta):""}${o.num?" · n. "+esc(o.num):""}</div></div><div style="flex:0 0 auto;text-align:right">${o.amt?eur(o.amt):""}<br><button class="mini" onclick="ordDone('${o.id}')">Arrivato</button></div></div>`).join("")}</div>`:""}
- ${chk.length?`<div class="card warn"><h2>Da controllare (${chk.length})</h2><p class="mut" style="margin-top:0">Email che non ho saputo leggere: inserisci l'importo o ignorale.</p>${chk.slice(0,10).map(c=>`<div class="item" style="align-items:flex-start"><div style="min-width:0"><b>${esc(c.subj)}</b><div class="mut">${esc(c.from)} · ${fd(c.d)}</div></div><div style="flex:0 0 auto;display:flex;gap:4px"><button class="mini" onclick="chkAdd('${c.id}')">€</button><button class="mini" onclick="chkSkip('${c.id}')" aria-label="Ignora">✕</button></div></div>`).join("")}</div>`:""}
- <div class="card"><h2>Movimenti</h2>${days.map(d=>`<div class="mut" style="margin-top:10px;text-transform:capitalize">${new Date(d+"T12:00").toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long"})}</div>${L.filter(m=>m.d==d).map(m=>`<div class="item"><span class="mic"><i class="ti ti-${cat(m.cat)[2]}"></i></span><div style="flex:1;min-width:0"><b>${esc(m.desc)}</b><div class="mut">${spEdit==m.id?`<select onchange="moneyCat('${m.id}',this.value)" style="padding:6px;margin-top:4px">${CATS.map(c=>`<option value="${c[0]}" ${c[0]==m.cat?"selected":""}>${c[1]}</option>`).join("")}</select>`:`<button class="lnk" onclick="spEdit='${m.id}';render()">${cat(m.cat)[1]}</button>`}</div></div><b style="flex:0 0 auto;color:${m.amt>0?"var(--kc)":"var(--ink)"}">${m.amt>0?"+":""}${eur(m.amt)}</b><button class="x" onclick="moneyDel('${m.id}')" aria-label="Elimina">✕</button></div>`).join("")}`).join("")||'<p class="mut">Nessun movimento.</p>'}
- <details style="margin-top:10px"><summary class="mut">Aggiungi a mano</summary><div class="row" style="margin-top:8px"><input id="mdesc" placeholder="Descrizione" style="flex:2 1 150px"><input id="mamt" inputmode="decimal" placeholder="−12,50"></div><div class="row" style="margin-top:6px"><input id="mdate" type="date" value="${day()}"><button onclick="moneyAdd()">Aggiungi</button></div></details></div>
- ${mailCard()}`}
-function moneyAdd(){const a=num(v("mamt"));if(!a||!v("mdesc"))return;const amt=/^\s*\+/.test(v("mamt"))?Math.abs(a):-Math.abs(a);S.money=S.money||[];S.money.push({id:uid(),d:v("mdate")||day(),amt,desc:v("mdesc"),cat:catOf(v("mdesc"),amt),src:"a mano"});save();render()}
-function moneyDel(id){if(!confirm("Eliminare questo movimento?"))return;S.money=S.money.filter(m=>m.id!=id);S.mailSkip=(S.mailSkip||[]).concat(id.startsWith("mail:")?[id]:[]);save();render()}
-function moneyCat(id,c){const m=S.money.find(x=>x.id==id);if(m)m.cat=c;spEdit=null;save();render()}
-function ordDone(id){const o=S.orders.find(x=>x.id==id);if(o)o.st="consegnato";save();render()}
-function chkSkip(id){S.mailChk=S.mailChk.filter(c=>c.id!=id);S.mailSkip=(S.mailSkip||[]).concat([id]);save();render()}
-function chkAdd(id){const c=S.mailChk.find(x=>x.id==id),a=prompt(`Importo per «${c.subj}» (metti + se è un'entrata):`);if(!a)return;const n0=num(a);if(!n0)return;const amt=/^\s*\+/.test(a)?Math.abs(n0):-Math.abs(n0);
- S.money=S.money||[];S.money.push({id:c.id,d:c.d,amt,desc:c.from||c.subj.slice(0,40),cat:catOf(c.from+" "+c.subj,amt),src:c.from});S.mailChk=S.mailChk.filter(x=>x.id!=id);save();render()}
-/* Collegamento Gmail: codice segreto generato qui (nel database va solo l'hash) e script da incollare su script.google.com */
-let mailTok=null;
-function mailCard(){if(!sb)return"";const at=S.mailAt?new Date(S.mailAt):null;
- return `<details class="card"${mailTok?" open":""}><summary><h2 style="display:inline">Email collegata</h2> <span class="mut">${at?"ultima email ricevuta "+at.toLocaleString("it-IT",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"non ancora collegata"}</span></summary>
- ${mailTok?mailSteps():`<p class="mut">Uno script gratuito nel tuo account Google legge ogni 15 minuti le email di banca, carte e negozi e manda a Fit Tracker solo oggetto e inizio del testo. Le password non passano mai da qui.</p><button style="width:100%" onclick="mailLink()"><i class="ti ti-mail"></i>${at?"Rigenera il codice":"Collega Gmail"}</button><p id="mlmsg" class="mut" role="status" style="margin:8px 0 0"></p>`}</details>`}
-async function mailLink(){if(!me){alert("Accedi prima al tuo account.");return}const b=crypto.getRandomValues(new Uint8Array(32)),tok=[...b].map(x=>x.toString(16).padStart(2,"0")).join("");
- const h=[...new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(tok)))].map(x=>x.toString(16).padStart(2,"0")).join("");
- const {error}=await sb.from("ingest_tokens").upsert({user_id:me.id,token_hash:h});if(error){$("mlmsg").textContent="Non riesco a creare il codice: "+error.message;return}mailTok=tok;render()}
-function gasCode(){return `// Fit Tracker: legge le email di banca, carte e negozi e le manda all'app. Gira solo nel tuo account Google.
-const CODICE = "${mailTok}"; // segreto: non condividerlo
-const INDIRIZZO = "${SB_URL}/functions/v1/ingest";
-const RICERCA = '(pagamento OR addebito OR accredito OR bonifico OR prelievo OR transazione OR "hai speso" OR "hai pagato" OR ordine OR spedito OR spedizione OR consegnato OR consegna OR "il tuo ordine") -in:spam -in:trash';
-
-function installa() { // eseguila una volta sola
-  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger("controllaPosta").timeBased().everyMinutes(15).create();
-  controllaPosta(30); // la prima volta legge gli ultimi 30 giorni
-}
-
-function controllaPosta(giorni) {
-  const p = PropertiesService.getScriptProperties();
-  const visti = JSON.parse(p.getProperty("visti") || "[]");
-  const g = typeof giorni === "number" ? giorni : 3;
-  const items = [];
-  GmailApp.search(RICERCA + " newer_than:" + g + "d", 0, 100).forEach(th => th.getMessages().forEach(m => {
-    const id = "mail:" + m.getId();
-    if (visti.indexOf(id) >= 0) return;
-    visti.push(id);
-    items.push({ id: id, d: Utilities.formatDate(m.getDate(), "Europe/Rome", "yyyy-MM-dd"), from: m.getFrom(),
-      subj: m.getSubject(), text: m.getPlainBody().replace(/\\s+/g, " ").slice(0, 1500) });
-  }));
-  for (let i = 0; i < items.length; i += 50) {
-    const r = UrlFetchApp.fetch(INDIRIZZO, { method: "post", contentType: "application/json", muteHttpExceptions: true,
-      payload: JSON.stringify({ token: CODICE, items: items.slice(i, i + 50) }) });
-    if (r.getResponseCode() >= 300) { console.log(r.getContentText()); return; } // riprova al prossimo giro
-  }
-  p.setProperty("visti", JSON.stringify(visti.slice(-1000)));
-}`}
-function mailSteps(){return `<ol class="mut" style="padding-left:18px">
- <li>Sul computer apri <b>script.google.com</b> con il tuo account Gmail e crea un <b>Nuovo progetto</b>.</li>
- <li>Cancella tutto quello che c'è e incolla il codice qui sotto (tasto <b>Copia</b>).</li>
- <li>Salva, scegli la funzione <b>installa</b> in alto e premi <b>Esegui</b>. Google ti chiede di autorizzare la lettura della posta: è il tuo script, conferma.</li>
- <li>Fatto: ogni 15 minuti i movimenti arrivano qui. La prima volta legge gli ultimi 30 giorni.</li></ol>
- <textarea readonly rows="8" id="gas" style="font-size:11px">${esc(gasCode())}</textarea>
- <div class="row" style="margin-top:8px"><button onclick="navigator.clipboard.writeText($('gas').value).then(()=>toast('Codice copiato'))"><i class="ti ti-copy"></i>Copia</button><button class="g" onclick="mailTok=null;render()">Ho finito</button></div>
- <p class="mut">Il codice contiene la chiave segreta del collegamento: non mandarlo a nessuno. Se lo perdi, generane uno nuovo e aggiorna lo script.</p>`}
 /* Navigazione */
-const TABS=[["oggi","home","Oggi"],["gym","barbell","Palestra"],["diet","salad","Dieta"],["spese","wallet","Spese"],["ag","calendar-event","Agenda"],["prog","chart-line","Progressi"],["doc","stethoscope","Referti"]];
+const TABS=[["oggi","home","Oggi"],["gym","barbell","Palestra"],["diet","salad","Dieta"],["ag","calendar-event","Agenda"],["prog","chart-line","Progressi"],["doc","stethoscope","Referti"]];
 function render(){const y=window.scrollY;
  if(sb&&(!me||needPw)){$("nav").style.display="none";$("fab").style.display="none";$("app").innerHTML=!authReady?'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>':me?vSetPw():vLogin();return}
  $("nav").style.display="";$("fab").style.display="";
  const na=alertsN();$("nav").innerHTML=TABS.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')" aria-label="${t[2]}${t[0]=="doc"&&na?`, ${na} avvisi`:""}"><span><i class="ti ti-${t[1]}" aria-hidden="true"></i></span>${t[2]}${t[0]=="doc"&&na?`<i class="dot">${na}</i>`:""}</button>`).join("");
- if(S.mail&&S.mail.length&&mailProcess())save();$("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,spese:vSpese,ag:vAg,prog:vProg,doc:vDoc}[tab]();paintCal();window.scrollTo(0,y);if(!sb||me)medalCheck()}
+ $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc}[tab]();paintCal();window.scrollTo(0,y);if(!sb||me)medalCheck()}
 function go(t){tab=t;render();window.scrollTo(0,0)}
 healthIn();try{WO=JSON.parse(localStorage.getItem(KWO));if(WO&&WO.d!=day())WO=null}catch(e){WO=null}
 startSync();render();paintTheme();lockShow();

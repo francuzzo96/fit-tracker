@@ -1021,9 +1021,11 @@ function vProf(){const p=S.p,kg=lastW(),tg=target(),bmi=kg&&p.h?kg/Math.pow(p.h/
  <div class="ln"><span>Calorie al giorno</span><b style="color:var(--kc)">${it(tg.k)} kcal</b></div><div class="ln"><span>Proteine</span><b>${tg.pr} g</b></div><div class="ln"><span>Acqua</span><b style="color:var(--wat)">${L1(waterTarget())} L</b></div></div>
  <div class="card"><h2>Allenamento</h2><div class="row"><div><label for="pbar">Bilanciere (kg)</label><select id="pbar" onchange="S.bar=+this.value;save()">${[20,15,10].map(x=>`<option ${(S.bar||20)==x?"selected":""}>${x}</option>`).join("")}</select></div><div><label for="prest">Recupero predefinito</label><select id="prest" onchange="S.p.rest=+this.value;save()">${[60,90,120,180].map(x=>`<option value="${x}" ${(p.rest||90)==x?"selected":""}>${x} s</option>`).join("")}</select></div></div></div>
  ${accCard()}${secCard()}`}
-function profGoal(g){S.p.goal=g;save();render()}
-function profSave(){S.p={...S.p,name:v("pn2"),sex:v("ps"),birth:v("pb")||S.p.birth||"",h:n("ph")||S.p.h||175,gw:n("pgw")||null,act:parseFloat(v("pc"))||S.p.act};if(S.p.birth)S.p.age=ageOf();save();render();toast("Profilo salvato")}
-async function profPhoto(el){const f=el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement("canvas"),s=Math.min(im.width,im.height);c.width=c.height=240;
+/* Legge i campi del profilo in S.p prima di ogni ridisegno, così niente di quello che hai scritto va perso */
+function profRead(){if(!$("pn2"))return;S.p={...S.p,name:v("pn2"),sex:v("ps"),birth:v("pb")||S.p.birth||"",h:n("ph")||S.p.h||175,gw:n("pgw")||null,act:parseFloat(v("pc"))||S.p.act};if(S.p.birth)S.p.age=ageOf()}
+function profGoal(g){profRead();S.p.goal=g;save();render()}
+function profSave(){profRead();save();render();toast("Profilo salvato")}
+async function profPhoto(el){const f=el.files[0];if(!f)return;profRead();const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement("canvas"),s=Math.min(im.width,im.height);c.width=c.height=240;
  c.getContext("2d").drawImage(im,(im.width-s)/2,(im.height-s)/2,s,s,0,0,240,240);S.p.photo=c.toDataURL("image/jpeg",.8);save();render()};im.src=r.result};r.readAsDataURL(f)}
 /* Navigazione */
 const TABS=[["oggi","home","Oggi"],["gym","barbell","Palestra"],["diet","salad","Dieta"],["ag","calendar-event","Agenda"],["prog","chart-line","Progressi"],["doc","stethoscope","Referti"]];
@@ -1031,8 +1033,8 @@ function render(){const y=window.scrollY;
  if(sb&&(!me||needPw)){$("nav").style.display="none";$("fab").style.display="none";$("app").innerHTML=!authReady?'<p class="mut" style="text-align:center;margin-top:30vh">Caricamento…</p>':me?vSetPw():vLogin();return}
  $("nav").style.display="";$("fab").style.display="";
  const na=alertsN();$("nav").innerHTML=TABS.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')" aria-label="${t[2]}${t[0]=="doc"&&na?`, ${na} avvisi`:""}"><span><i class="ti ti-${t[1]}" aria-hidden="true"></i></span>${t[2]}${t[0]=="doc"&&na?`<i class="dot">${na}</i>`:""}</button>`).join("");
- $("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc,prof:vProf}[tab]();paintCal();window.scrollTo(0,y);if(!sb||me)medalCheck()}
-function go(t){tab=t;render();window.scrollTo(0,0)}
+ if(tab=="prof")profRead();$("app").innerHTML={oggi:vOggi,gym:vGym,diet:vDiet,ag:vAg,prog:vProg,doc:vDoc,prof:vProf}[tab]();paintCal();window.scrollTo(0,y);if(!sb||me)medalCheck()}
+function go(t){if(tab=="prof"&&t!="prof"){profRead();save()}tab=t;render();window.scrollTo(0,0)}
 healthIn();try{WO=JSON.parse(localStorage.getItem(KWO));if(WO&&WO.d!=day())WO=null}catch(e){WO=null}
 startSync();render();paintTheme();lockShow();
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){render();syncNow()}});
